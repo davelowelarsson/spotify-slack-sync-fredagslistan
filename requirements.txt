@@ -1,0 +1,6 @@
+wheel
+requests
+datetime
+slack_sdk
+python-dotenv
+urllib
