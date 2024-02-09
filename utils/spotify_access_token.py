@@ -12,6 +12,10 @@ from datetime import datetime
 # try loading from .env file but use ENV variable if it exists
 load_dotenv()
 
+# load in the envs from the environment if they are set
+spotify_client_id = os.getenv("SPOTIFY_CLIENT_ID")
+spotify_client_secret = os.getenv("SPOTIFY_CLIENT_SECRET")
+spotify_redirect_uri = os.getenv("SPOTIFY_REDIRECT_URI")
 
 def check_spotify_token(spotify_token):
     spotify_token = spotify_token or os.getenv("SPOTIFY_API_TOKEN")
@@ -32,6 +36,14 @@ def check_spotify_token(spotify_token):
 
 
 def get_spotify_access_token():
+    # pull in environment variables and set them if they exist
+    print('Spotify client id: ', os.getenv("SPOTIFY_CLIENT_ID"))
+    spotify_client_id = os.getenv("SPOTIFY_CLIENT_ID")
+    print('Spotify client secret: ', os.getenv("SPOTIFY_CLIENT_SECRET"))
+    spotify_client_secret = os.getenv("SPOTIFY_CLIENT_SECRET")
+    print('Spotify redirect uri: ', os.getenv("SPOTIFY_REDIRECT_URI"))
+    spotify_redirect_uri = os.getenv("SPOTIFY_REDIRECT_URI")
+
     scope = 'playlist-read-collaborative playlist-modify-public playlist-modify-private'
     sp = spotipy.Spotify(auth_manager=SpotifyOAuth(scope=scope))
 
