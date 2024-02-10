@@ -19,14 +19,19 @@ from datetime import datetime
 # Load .env file
 load_dotenv()
 
-# Instantiate a Web API client
-slack_token = os.getenv("SLACK_API_TOKEN")
-client = WebClient(token=slack_token)
 
+def get_slack_client():
+    # Get the Slack token from the environment variable
+    slack_token = os.getenv("SLACK_API_TOKEN")
+
+    # Instantiate a Web API client
+    client = WebClient(token=slack_token)
+
+    return slack_token, client
 
 def check_slack_token():
-    # TODO: Implement a function to check the Slack token.
-    client = WebClient(token=slack_token)
+    slack_token, client = get_slack_client()
+
     try:
         response = client.auth_test()
         if response["ok"]:
@@ -38,6 +43,8 @@ def check_slack_token():
 
 
 def get_todays_slack_urls(channel_id="CAB3JFSQN"):
+    slack_token, client = get_slack_client()
+
     check_slack_token()
 
     # get the messages from the #fredagslistan channel
