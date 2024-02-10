@@ -20,8 +20,8 @@ spotify_redirect_uri = os.getenv("SPOTIFY_REDIRECT_URI")
 def check_spotify_token(spotify_token):
     spotify_token = spotify_token or os.getenv("SPOTIFY_API_TOKEN")
 
-    print('Spotify token: ', spotify_token)
-    print('Spotify token access_token: ', spotify_token.get('access_token'))
+    # print('Spotify token: ', spotify_token)
+    # print('Spotify token access_token: ', spotify_token.get('access_token'))
 
     headers = {
         'Authorization': 'Bearer {}'.format(spotify_token.get('access_token'))
