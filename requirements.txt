@@ -5,3 +5,4 @@ slack_sdk
 python-dotenv
 spotipy
 pytest
+freezegun
