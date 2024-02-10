@@ -71,8 +71,8 @@ def get_todays_slack_urls(channel_id="CAB3JFSQN"):
                 # print(track_id)
                 spotify_links.append(track_id.group(1))
 
-    # print length of list from slack
-    print('counted tracks added today in slack: ', len(spotify_links))
+    # # print length of list from slack
+    # print('counted tracks added today in slack: ', len(spotify_links))
 
-    print(spotify_links)
+    # print(spotify_links)
     return spotify_links

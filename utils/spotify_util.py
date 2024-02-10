@@ -14,11 +14,11 @@ def get_playlist(playlist_id='1OdSuwMRWtpP0nVhLffEqe'):
     print(playlist['external_urls'])
 
     # Print length of tracks all tracks in the playlist
-    print('counted tracks', len(playlist['tracks']['items']))
-    print('  total tracks', playlist['tracks']['total'])
+    # print('counted tracks', len(playlist['tracks']['items']))
+    # print('  total tracks', playlist['tracks']['total'])
 
-    print('Added today in Spotify: ')
-    print(datetime.now().strftime('%Y-%m-%d'))
+    # print('Added today in Spotify: ')
+    # print(datetime.now().strftime('%Y-%m-%d'))
 
     # Save todays songs added in an array [name, url, track_id]
     todays_songs = []
@@ -36,13 +36,13 @@ def get_playlist(playlist_id='1OdSuwMRWtpP0nVhLffEqe'):
                 'track_id': item['track']['id']
             })
 
-    #  print length of tracks in spotify list
-    print('counted tracks added today in spotify: ', len(todays_songs))
+    # #  print length of tracks in spotify list
+    # print('counted tracks added today in spotify: ', len(todays_songs))
 
-    # print all todays songs
-    for song in todays_songs:
-        print('Name: ', song['name'], 'URL: ',
-              song['url'], 'Track ID: ', song['track_id'])
+    # # print all todays songs
+    # for song in todays_songs:
+    #     print('Name: ', song['name'], 'URL: ',
+    #           song['url'], 'Track ID: ', song['track_id'])
 
     return todays_songs
 
@@ -51,16 +51,16 @@ def get_playlist(playlist_id='1OdSuwMRWtpP0nVhLffEqe'):
 def add_songs_to_spotify_playlist(playlist_id='1OdSuwMRWtpP0nVhLffEqe', track_ids=[]):
     sp = get_spotify_access_token()
 
-    print('######### Adding tracks to playlist: ###########')
-    print(sp.me())
-    print('sp access token: ', sp.auth_manager.get_access_token())
+    # print('######### Adding tracks to playlist: ###########')
+    # print(sp.me())
+    # print('sp access token: ', sp.auth_manager.get_access_token())
 
     # make sure the incoming tracks is a list with strings
     if not isinstance(track_ids, list):
         track_ids = [track_ids]
 
     if track_ids:
-        print('Adding tracks: ', track_ids)
+        # print('Adding tracks: ', track_ids)
         sp.playlist_add_items(playlist_id, track_ids)
     else:
         print('No tracks to add to playlist.')
