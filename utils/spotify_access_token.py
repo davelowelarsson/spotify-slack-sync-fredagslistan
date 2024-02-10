@@ -37,17 +37,14 @@ def check_spotify_token(spotify_token):
 
 def get_spotify_access_token():
     # pull in environment variables and set them if they exist
-    print('Spotify client id: ', os.getenv("SPOTIPY_CLIENT_ID"))
-    spotify_client_id = os.getenv("SPOTIPY_CLIENT_ID")
-    print('Spotify client secret: ', os.getenv("SPOTIPY_CLIENT_SECRET"))
-    spotify_client_secret = os.getenv("SPOTIPY_CLIENT_SECRET")
-    print('Spotify redirect uri: ', os.getenv("SPOTIPY_REDIRECT_URI"))
-    spotify_redirect_uri = os.getenv("SPOTIPY_REDIRECT_URI")
+    # print('Spotify client id: ', os.getenv("SPOTIPY_CLIENT_ID"))
+    # print('Spotify client secret: ', os.getenv("SPOTIPY_CLIENT_SECRET"))
+    # print('Spotify redirect uri: ', os.getenv("SPOTIPY_REDIRECT_URI"))
 
     scope = 'playlist-read-collaborative playlist-modify-public playlist-modify-private'
     sp = spotipy.Spotify(auth_manager=SpotifyOAuth(scope=scope))
 
-    print('Spotify token: ', sp.auth_manager.get_access_token())
+    # print('Spotify token: ', sp.auth_manager.get_access_token())
     # ex.
     # spotify token:
     # {
@@ -61,8 +58,8 @@ def get_spotify_access_token():
 
     spotify_token = sp.auth_manager.get_access_token()
 
-    # print permissions for the token
-    print(sp.me())
+    # # print permissions for the token
+    # print(sp.me())
 
     check_spotify_token(spotify_token)
 
