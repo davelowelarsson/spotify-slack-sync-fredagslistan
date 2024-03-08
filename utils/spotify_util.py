@@ -1,5 +1,7 @@
 from utils.spotify_access_token import get_spotify_access_token
 from datetime import datetime
+from spotipy import SpotifyException
+
 
 
 def get_playlist(playlist_id='1OdSuwMRWtpP0nVhLffEqe'):
@@ -23,18 +25,20 @@ def get_playlist(playlist_id='1OdSuwMRWtpP0nVhLffEqe'):
     # Save todays songs added in an array [name, url, track_id]
     todays_songs = []
 
-    # print length of tracks added today
-    for item in playlist['tracks']['items']:
-        # print added date
-        # print(item['added_at'])
-        # if date is today print track name
-        # example of todays date: 2024-02-02T08:18:14Z
-        if item['added_at'].split('T')[0] == datetime.now().strftime('%Y-%m-%d'):
-            todays_songs.append({
-                'name': item['track']['name'],
-                'url': item['track']['external_urls']['spotify'],
-                'track_id': item['track']['id']
-            })
+    results = playlist['tracks']
+    while results:
+        for item in results['items']:
+            if item['added_at'].split('T')[0] == datetime.now().strftime('%Y-%m-%d'):
+                todays_songs.append({
+                    'name': item['track']['name'],
+                    'url': item['track']['external_urls']['spotify'],
+                    'track_id': item['track']['id']
+                })
+
+        try:
+            results = sp.next(results)
+        except SpotifyException:
+            results = None
 
     # #  print length of tracks in spotify list
     # print('counted tracks added today in spotify: ', len(todays_songs))
