@@ -35,6 +35,9 @@ def get_playlist(playlist_id='1OdSuwMRWtpP0nVhLffEqe'):
                     'track_id': item['track']['id']
                 })
 
+        if results['next'] is None:
+            break
+
         try:
             results = sp.next(results)
         except SpotifyException:
