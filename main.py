@@ -27,8 +27,13 @@ def compare_lists_and_remove_duplicates():
   print('difference between slack and spotify lists: ', len(
       songs_added_in_slack) - len(songs_already_in_spotify))
 
+  # Sort slack tracks by timestamp
+  songs_added_in_slack_sorted = sorted(
+      songs_added_in_slack, key=lambda x: x['timestamp'])
+
+
   # loop through the slack list
-  for song in songs_added_in_slack:
+  for song in songs_added_in_slack_sorted:
     # check if the song is in the spotify list
     # if it's not in the list, add it to the new list
     if not any(song == s['track_id'] for s in songs_already_in_spotify):
