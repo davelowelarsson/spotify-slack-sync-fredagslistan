@@ -36,8 +36,8 @@ def compare_lists_and_remove_duplicates():
   for song in songs_added_in_slack_sorted:
     # check if the song is in the spotify list
     # if it's not in the list, add it to the new list
-    if not any(song == s['track_id'] for s in songs_already_in_spotify):
-        songs_to_add.append(song)
+    if not any(song['track_id'] == s['track_id'] for s in songs_already_in_spotify):
+        songs_to_add.append(song['track_id'])
 
   # print the new list
   print('songs_to_add: ', len(songs_to_add))
