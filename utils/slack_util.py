@@ -69,8 +69,12 @@ def get_todays_slack_urls(channel_id="CAB3JFSQN"):
             # sometimes the track has acountry code like track/IT/19udLuHd7CD8XxrOmUaXPn in the url which I need to handle as well
             if "open.spotify.com/track" in message['text']:
                 track_id = re.search(r'track/(\w+)', message['text'])
-                # print(track_id)
-                spotify_links.append(track_id.group(1))
+                if track_id:
+                    spotify_links.append({
+                        'track_id': track_id.group(1),
+                        'timestamp': message['ts']
+                    })
+
 
     # # print length of list from slack
     # print('counted tracks added today in slack: ', len(spotify_links))
