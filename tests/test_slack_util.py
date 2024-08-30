@@ -79,7 +79,9 @@ def test_get_todays_slack_urls(mock_WebClient):
     mock_client.conversations_history.assert_called_once_with(
         channel='CAB3JFSQN')
     assert len(result) == 2
-    assert result[0] == 'track1'
-    assert result[1] == 'track2'
+    assert result[0] == {'track_id': 'track1',
+                         'timestamp': '1641234567.123456'}
+    assert result[1] == {'track_id': 'track2',
+                         'timestamp': '1641234567.123457'}
 
     print('SLACK_API_TOKEN: ', os.environ.get('SLACK_API_TOKEN'))
