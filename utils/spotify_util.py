@@ -1,5 +1,5 @@
 from utils.spotify_access_token import get_spotify_access_token
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from spotipy import SpotifyException
 
 
@@ -14,17 +14,16 @@ def is_track_within_window(added_at: str, days_back: int = 6) -> bool:
     Returns:
         True if the track was added within the last `days_back` days
     """
-    # Parse the added_at timestamp (format: 2022-01-07T12:00:00Z)
+    # Parse the added_at timestamp (format: 2022-01-07T12:00:00Z) as UTC
     track_datetime = datetime.fromisoformat(added_at.replace('Z', '+00:00'))
-    track_date = track_datetime.replace(tzinfo=None)
 
-    # Calculate the cutoff date
-    now = datetime.now()
+    # Calculate the cutoff date (start of day, days_back days ago) in UTC
+    now = datetime.now(tz=timezone.utc)
     cutoff = now - timedelta(days=days_back)
     cutoff_start_of_day = cutoff.replace(
         hour=0, minute=0, second=0, microsecond=0)
 
-    return track_date >= cutoff_start_of_day
+    return track_datetime >= cutoff_start_of_day
 
 
 def get_playlist(playlist_id='1OdSuwMRWtpP0nVhLffEqe', days_back: int = 6):

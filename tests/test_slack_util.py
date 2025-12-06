@@ -30,13 +30,28 @@ class TestIsMessageWithinWindow:
     @freeze_time("2022-01-07")  # Friday
     def test_message_from_6_days_ago_is_included(self):
         """Message from 6 days ago should be included (boundary)."""
-        message = {'ts': '1641038400.123456'}  # Jan 1 (6 days ago)
+        message = {
+            'ts': '1641038400.123456'}  # Jan 1 00:00:00 UTC (6 days ago)
+        assert is_message_within_window(message) is True
+
+    @freeze_time("2022-01-07")  # Friday
+    def test_message_from_6_days_ago_at_midnight_is_included(self):
+        """Message at exactly midnight 6 days ago should be included (exact boundary)."""
+        # Jan 1, 2022 00:00:00 UTC = 1640995200
+        message = {'ts': '1640995200.000000'}
         assert is_message_within_window(message) is True
 
     @freeze_time("2022-01-07")  # Friday
     def test_message_from_7_days_ago_is_excluded(self):
         """Message from 7 days ago should be excluded (last Friday)."""
         message = {'ts': '1640952000.123456'}  # Dec 31 (7 days ago)
+        assert is_message_within_window(message) is False
+
+    @freeze_time("2022-01-07")  # Friday
+    def test_message_from_7_days_ago_at_2359_is_excluded(self):
+        """Message at 23:59 on day 7 (just before midnight) should be excluded."""
+        # Dec 31, 2021 23:59:59 UTC = 1640995199
+        message = {'ts': '1640995199.000000'}
         assert is_message_within_window(message) is False
 
     @freeze_time("2022-01-07")  # Friday

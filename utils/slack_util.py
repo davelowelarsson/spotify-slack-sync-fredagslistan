@@ -16,7 +16,7 @@ from slack_sdk.errors import SlackApiError
 import os
 from dotenv import load_dotenv
 import re
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 # Load .env file
 load_dotenv()
@@ -77,10 +77,11 @@ def is_message_within_window(message: dict, days_back: int = 6) -> bool:
         True if the message is from today or within the last `days_back` days
     """
     message_timestamp = int(message['ts'].split(".")[0])
-    message_datetime = datetime.fromtimestamp(message_timestamp)
+    # Convert Unix timestamp to UTC datetime
+    message_datetime = datetime.fromtimestamp(message_timestamp, tz=timezone.utc)
 
-    # Calculate the cutoff date (start of day, days_back days ago)
-    now = datetime.now()
+    # Calculate the cutoff date (start of day, days_back days ago) in UTC
+    now = datetime.now(tz=timezone.utc)
     cutoff = now - timedelta(days=days_back)
     cutoff_start_of_day = cutoff.replace(
         hour=0, minute=0, second=0, microsecond=0)

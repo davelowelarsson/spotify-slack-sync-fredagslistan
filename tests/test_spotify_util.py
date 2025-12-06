@@ -24,9 +24,19 @@ class TestIsTrackWithinWindow:
         assert is_track_within_window('2022-01-01T12:00:00Z') is True
 
     @freeze_time("2022-01-07")  # Friday
+    def test_track_from_6_days_ago_at_midnight_is_included(self):
+        """Track added exactly at midnight 6 days ago should be included (exact boundary)."""
+        assert is_track_within_window('2022-01-01T00:00:00Z') is True
+
+    @freeze_time("2022-01-07")  # Friday
     def test_track_from_7_days_ago_is_excluded(self):
         """Track added 7 days ago should be excluded."""
         assert is_track_within_window('2021-12-31T12:00:00Z') is False
+
+    @freeze_time("2022-01-07")  # Friday
+    def test_track_from_7_days_ago_at_2359_is_excluded(self):
+        """Track added at 23:59 on day 7 (just before midnight) should be excluded."""
+        assert is_track_within_window('2021-12-31T23:59:59Z') is False
 
     @freeze_time("2022-01-07")  # Friday
     def test_track_from_2_months_ago_is_excluded(self):
