@@ -8,19 +8,22 @@
 # if yes, add to list
 # return list
 
+from __future__ import annotations
+
 # import the slack client
 from slack_sdk import WebClient
 from slack_sdk.errors import SlackApiError
 import os
 from dotenv import load_dotenv
 import re
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 
 # Load .env file
 load_dotenv()
 
 
-def get_slack_client():
+def get_slack_client() -> tuple[str | None, WebClient]:
+    """Get Slack client and token from environment."""
     # Get the Slack token from the environment variable
     slack_token = os.getenv("SLACK_API_TOKEN")
 
@@ -29,7 +32,8 @@ def get_slack_client():
 
     return slack_token, client
 
-def check_slack_token():
+
+def check_slack_token() -> None:
     slack_token, client = get_slack_client()
 
     try:
@@ -42,7 +46,62 @@ def check_slack_token():
         print(f"Error validating Slack token: {e.response['error']}")
 
 
-def get_todays_slack_urls(channel_id="CAB3JFSQN"):
+def extract_spotify_track_ids(text: str) -> list[str]:
+    """
+    Extract all Spotify track IDs from a text string.
+
+    Handles various URL formats:
+    - https://open.spotify.com/track/32M0hVHxSzweqkrIJOxJqN
+    - https://open.spotify.com/track/IT/32M0hVHxSzweqkrIJOxJqN (with country code)
+    - https://open.spotify.com/track/32M0hVHxSzweqkrIJOxJqN?si=abc123 (with query params)
+
+    Returns a list of track IDs found in the text.
+    """
+    # Pattern explanation:
+    # - track/ followed by optional 2-letter country code and slash
+    # - then capture the track ID (alphanumeric, typically 22 chars)
+    # - stops at ? or whitespace or end of string
+    pattern = r'open\.spotify\.com/track/(?:[A-Z]{2}/)?([a-zA-Z0-9]+)'
+    return re.findall(pattern, text)
+
+
+def is_message_within_window(message: dict, days_back: int = 6) -> bool:
+    """
+    Check if a message was posted within the rolling window.
+
+    Args:
+        message: A Slack message dict with a 'ts' timestamp field
+        days_back: Number of days to look back (default: 6 to skip last Friday)
+
+    Returns:
+        True if the message is from today or within the last `days_back` days
+    """
+    message_timestamp = int(message['ts'].split(".")[0])
+    # Convert Unix timestamp to UTC datetime
+    message_datetime = datetime.fromtimestamp(message_timestamp, tz=timezone.utc)
+
+    # Calculate the cutoff date (start of day, days_back days ago) in UTC
+    now = datetime.now(tz=timezone.utc)
+    cutoff = now - timedelta(days=days_back)
+    cutoff_start_of_day = cutoff.replace(
+        hour=0, minute=0, second=0, microsecond=0)
+
+    return message_datetime >= cutoff_start_of_day
+
+
+def get_recent_slack_tracks(channel_id: str = "CAB3JFSQN") -> list[dict]:
+    """
+    Get Spotify track IDs from recent Slack messages (within rolling window).
+
+    Fetches messages from the last 6 days, including thread replies,
+    and extracts all Spotify track IDs.
+
+    Args:
+        channel_id: Slack channel ID to fetch messages from
+
+    Returns:
+        List of dicts with 'track_id' and 'timestamp' keys
+    """
     slack_token, client = get_slack_client()
 
     check_slack_token()
@@ -54,30 +113,50 @@ def get_todays_slack_urls(channel_id="CAB3JFSQN"):
 
     # retrieve the messages
     messages = response['messages']
-    # print(messages)
 
-    today_messages = [message for message in messages]
-
-    # add id's from the spotify links to a list
-    # for example 19udLuHd7CD8XxrOmUaXPn in https://open.spotify.com/track/19udLuHd7CD8XxrOmUaXPn
+    # Track all spotify links found (using set to avoid duplicates)
+    seen_track_ids = set()
     spotify_links = []
 
-    # print the messages
-    for message in today_messages:
-        if datetime.fromtimestamp(int(message['ts'].split(".")[0])).strftime('%Y-%m-%d') == datetime.now().strftime('%Y-%m-%d'):
-            # print(message["text"])
-            # sometimes the track has acountry code like track/IT/19udLuHd7CD8XxrOmUaXPn in the url which I need to handle as well
-            if "open.spotify.com/track" in message['text']:
-                track_id = re.search(r'track/(\w+)', message['text'])
-                if track_id:
-                    spotify_links.append({
-                        'track_id': track_id.group(1),
-                        'timestamp': message['ts']
-                    })
+    def add_track(track_id, timestamp):
+        """Add a track if not already seen."""
+        if track_id not in seen_track_ids:
+            seen_track_ids.add(track_id)
+            spotify_links.append({
+                'track_id': track_id,
+                'timestamp': timestamp
+            })
 
+    # Process each message within the rolling window
+    for message in messages:
+        if not is_message_within_window(message):
+            continue
 
-    # # print length of list from slack
-    # print('counted tracks added today in slack: ', len(spotify_links))
+        # Extract all Spotify track IDs from this message
+        track_ids = extract_spotify_track_ids(message.get('text', ''))
+        for track_id in track_ids:
+            add_track(track_id, message['ts'])
 
-    # print(spotify_links)
+        # Check if this message has thread replies
+        reply_count = message.get('reply_count', 0)
+        if reply_count > 0:
+            # Fetch thread replies
+            thread_ts = message.get('thread_ts', message['ts'])
+            try:
+                replies_response = client.conversations_replies(
+                    channel=channel_id,
+                    ts=thread_ts
+                )
+                thread_messages = replies_response.get('messages', [])
+
+                # Process thread messages (skip first one as it's the parent, already processed)
+                for thread_message in thread_messages[1:]:
+                    if is_message_within_window(thread_message):
+                        thread_track_ids = extract_spotify_track_ids(
+                            thread_message.get('text', ''))
+                        for track_id in thread_track_ids:
+                            add_track(track_id, thread_message['ts'])
+            except SlackApiError as e:
+                print(f"Error fetching thread replies: {e.response['error']}")
+
     return spotify_links
