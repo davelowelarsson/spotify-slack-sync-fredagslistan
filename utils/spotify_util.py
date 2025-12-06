@@ -1,35 +1,63 @@
 from utils.spotify_access_token import get_spotify_access_token
-from datetime import datetime
+from datetime import datetime, timedelta
 from spotipy import SpotifyException
 
 
+def is_track_within_window(added_at: str, days_back: int = 6) -> bool:
+    """
+    Check if a track was added to the playlist within the rolling window.
+    
+    Args:
+        added_at: ISO 8601 timestamp string (e.g., '2022-01-07T12:00:00Z')
+        days_back: Number of days to look back (default: 6)
+    
+    Returns:
+        True if the track was added within the last `days_back` days
+    """
+    # Parse the added_at timestamp (format: 2022-01-07T12:00:00Z)
+    track_datetime = datetime.fromisoformat(added_at.replace('Z', '+00:00'))
+    track_date = track_datetime.replace(tzinfo=None)
 
-def get_playlist(playlist_id='1OdSuwMRWtpP0nVhLffEqe'):
+    # Calculate the cutoff date
+    now = datetime.now()
+    cutoff = now - timedelta(days=days_back)
+    cutoff_start_of_day = cutoff.replace(
+        hour=0, minute=0, second=0, microsecond=0)
+
+    return track_date >= cutoff_start_of_day
+
+
+def get_playlist(playlist_id='1OdSuwMRWtpP0nVhLffEqe', days_back: int = 6):
+    """
+    Get tracks added to the Spotify playlist within the rolling window.
+    
+    Only returns tracks added in the last `days_back` days. This allows
+    songs that were added more than 6 days ago to "come back" if someone
+    shares them again in Slack.
+    
+    Args:
+        playlist_id: Spotify playlist ID
+        days_back: Number of days to look back (default: 6)
+    
+    Returns:
+        List of track dicts with name, url, and track_id
+    """
     sp = get_spotify_access_token()
-
-    # Print one single public playlist
-    # https://open.spotify.com/playlist/45o1nZW7H9uruWYiR6pz9S?si=c734ae1351a84a9b
 
     playlist = sp.playlist(playlist_id)
     print(playlist['name'])
     print(playlist['description'])
     print(playlist['external_urls'])
 
-    # Print length of tracks all tracks in the playlist
-    # print('counted tracks', len(playlist['tracks']['items']))
-    # print('  total tracks', playlist['tracks']['total'])
-
-    # print('Added today in Spotify: ')
-    # print(datetime.now().strftime('%Y-%m-%d'))
-
-    # Save todays songs added in an array [name, url, track_id]
-    todays_songs = []
+    # Get tracks added within the rolling window
+    recent_songs = []
 
     results = playlist['tracks']
     while results:
         for item in results['items']:
-            if item['added_at'].split('T')[0] == datetime.now().strftime('%Y-%m-%d'):
-                todays_songs.append({
+            # Only include tracks added within the rolling window
+            if is_track_within_window(item['added_at'], days_back):
+                recent_songs.append({
                     'name': item['track']['name'],
                     'url': item['track']['external_urls']['spotify'],
                     'track_id': item['track']['id']
@@ -43,15 +71,7 @@ def get_playlist(playlist_id='1OdSuwMRWtpP0nVhLffEqe'):
         except SpotifyException:
             results = None
 
-    # #  print length of tracks in spotify list
-    # print('counted tracks added today in spotify: ', len(todays_songs))
-
-    # # print all todays songs
-    # for song in todays_songs:
-    #     print('Name: ', song['name'], 'URL: ',
-    #           song['url'], 'Track ID: ', song['track_id'])
-
-    return todays_songs
+    return recent_songs
 
 
 # Add tracks to playlist using track id

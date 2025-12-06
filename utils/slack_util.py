@@ -16,7 +16,7 @@ from slack_sdk.errors import SlackApiError
 import os
 from dotenv import load_dotenv
 import re
-from datetime import datetime
+from datetime import datetime, timedelta
 
 # Load .env file
 load_dotenv()
@@ -47,12 +47,12 @@ def check_slack_token():
 def extract_spotify_track_ids(text: str) -> list[str]:
     """
     Extract all Spotify track IDs from a text string.
-    
+
     Handles various URL formats:
     - https://open.spotify.com/track/32M0hVHxSzweqkrIJOxJqN
     - https://open.spotify.com/track/IT/32M0hVHxSzweqkrIJOxJqN (with country code)
     - https://open.spotify.com/track/32M0hVHxSzweqkrIJOxJqN?si=abc123 (with query params)
-    
+
     Returns a list of track IDs found in the text.
     """
     # Pattern explanation:
@@ -63,15 +63,42 @@ def extract_spotify_track_ids(text: str) -> list[str]:
     return re.findall(pattern, text)
 
 
-def is_message_from_today(message: dict) -> bool:
-    """Check if a message was posted today based on its timestamp."""
-    message_date = datetime.fromtimestamp(
-        int(message['ts'].split(".")[0])).strftime('%Y-%m-%d')
-    today = datetime.now().strftime('%Y-%m-%d')
-    return message_date == today
+def is_message_within_window(message: dict, days_back: int = 6) -> bool:
+    """
+    Check if a message was posted within the rolling window.
+
+    Args:
+        message: A Slack message dict with a 'ts' timestamp field
+        days_back: Number of days to look back (default: 6 to skip last Friday)
+
+    Returns:
+        True if the message is from today or within the last `days_back` days
+    """
+    message_timestamp = int(message['ts'].split(".")[0])
+    message_datetime = datetime.fromtimestamp(message_timestamp)
+
+    # Calculate the cutoff date (start of day, days_back days ago)
+    now = datetime.now()
+    cutoff = now - timedelta(days=days_back)
+    cutoff_start_of_day = cutoff.replace(
+        hour=0, minute=0, second=0, microsecond=0)
+
+    return message_datetime >= cutoff_start_of_day
 
 
-def get_todays_slack_urls(channel_id="CAB3JFSQN"):
+def get_recent_slack_tracks(channel_id="CAB3JFSQN"):
+    """
+    Get Spotify track IDs from recent Slack messages (within rolling window).
+
+    Fetches messages from the last 6 days, including thread replies,
+    and extracts all Spotify track IDs.
+
+    Args:
+        channel_id: Slack channel ID to fetch messages from
+
+    Returns:
+        List of dicts with 'track_id' and 'timestamp' keys
+    """
     slack_token, client = get_slack_client()
 
     check_slack_token()
@@ -97,9 +124,9 @@ def get_todays_slack_urls(channel_id="CAB3JFSQN"):
                 'timestamp': timestamp
             })
 
-    # Process each message from today
+    # Process each message within the rolling window
     for message in messages:
-        if not is_message_from_today(message):
+        if not is_message_within_window(message):
             continue
 
         # Extract all Spotify track IDs from this message
@@ -121,7 +148,7 @@ def get_todays_slack_urls(channel_id="CAB3JFSQN"):
 
                 # Process thread messages (skip first one as it's the parent, already processed)
                 for thread_message in thread_messages[1:]:
-                    if is_message_from_today(thread_message):
+                    if is_message_within_window(thread_message):
                         thread_track_ids = extract_spotify_track_ids(
                             thread_message.get('text', ''))
                         for track_id in thread_track_ids:

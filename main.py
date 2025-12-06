@@ -1,14 +1,14 @@
 # start by getting spotify access-token
 # import the file and runt the function
 from utils.spotify_util import get_playlist, add_songs_to_spotify_playlist
-from utils.slack_util import get_todays_slack_urls
+from utils.slack_util import get_recent_slack_tracks
 
 from datetime import datetime
 
 
 def compare_lists_and_remove_duplicates():
   songs_already_in_spotify = get_playlist()
-  songs_added_in_slack = get_todays_slack_urls()
+  songs_added_in_slack = get_recent_slack_tracks()
 
   # compare the two lists and create a new list without duplicates
   # if the song is in the spotify list it's not allowed to be added to the new list
@@ -16,16 +16,13 @@ def compare_lists_and_remove_duplicates():
   # create a new list
   songs_to_add = []
 
-  # the lists have different formats which we need to ta into account
-  # the slack list is a list of strings ex. ['32M0hVHxSzweqkrIJOxJqN', '2S2kBpCQQ3FXWK5terDA38']
-  # the spotify list is a list of dictionaries ex. [{'name': 'The Less I Know The Better', 'url': 'https://open.spotify.com/track/32M0hVHxSzweqkrIJOxJqN', 'track_id': '32M0hVHxSzweqkrIJOxJqN'}, {'name': 'The Less I Know The Better', 'url': 'https://open.spotify.com/track/2S2kBpCQQ3FXWK5terDA38', 'track_id': '2S2kBpCQQ3FXWK5terDA38'}]
+  # the lists have different formats which we need to take into account
+  # the slack list is a list of dicts with track_id and timestamp
+  # the spotify list is a list of dicts with name, url, and track_id
 
-  # count the length of both lists and the result should be the amount of songs in slack but not in spotify
-  print('counted tracks added today in slack: ', len(songs_added_in_slack))
-  print('counted tracks added today in spotify: ', len(songs_already_in_spotify))
-  # print the difference between the two lists
-  print('difference between slack and spotify lists: ', len(
-      songs_added_in_slack) - len(songs_already_in_spotify))
+  # count the length of both lists
+  print('Tracks from Slack (last 6 days): ', len(songs_added_in_slack))
+  print('Tracks already in Spotify playlist: ', len(songs_already_in_spotify))
 
   # Sort slack tracks by timestamp
   songs_added_in_slack_sorted = sorted(

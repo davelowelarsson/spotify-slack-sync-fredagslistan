@@ -5,10 +5,17 @@
 This project syncs Spotify tracks shared in a Slack channel (#fredagslistan) to a Spotify playlist. It runs on a schedule every Friday between 08:00-18:00 via GitHub Actions.
 
 ### Core Workflow
-1. Fetch today's messages from Slack channel (including threads)
+1. Fetch messages from Slack channel from the last 6 days (including threads)
 2. Extract Spotify track IDs from messages
-3. Compare with existing tracks in Spotify playlist
+3. Compare with tracks added to Spotify playlist in the last 6 days
 4. Add new tracks to the playlist (preserving chronological order)
+
+### Rolling Window (6 Days)
+Both Slack messages AND Spotify playlist tracks use a 6-day rolling window:
+- **Slack**: Captures songs shared earlier in the week leading up to Friday
+- **Spotify**: Only checks recent additions, allowing songs to "come back"
+- **Why 6 days?**: Skips last Friday's songs (7+ days ago) to avoid duplicates within the same week
+- **Song comeback**: If a song was added 2 months ago but is shared again, it gets re-added!
 
 ## Tech Stack
 
@@ -164,9 +171,15 @@ Use `re.findall()` instead of `re.search()` to capture all track IDs when a mess
 4. Preserve chronological order using message timestamps
 
 ### Duplicate Prevention
-- Fetch current playlist tracks before adding
-- Compare track IDs to avoid duplicates
+- Uses a 6-day rolling window for both Slack messages AND Spotify playlist
+- Only prevents duplicates within the same 6-day window
+- Songs added more than 6 days ago can be re-added (they "come back")
 - Sort by timestamp to maintain order of addition
+
+### Key Functions
+- `is_message_within_window(message, days_back=6)` - Check if Slack message is within window
+- `is_track_within_window(added_at, days_back=6)` - Check if Spotify track is within window
+- `extract_spotify_track_ids(text)` - Extract all track IDs from a message (handles multiple links)
 
 ## Troubleshooting
 
