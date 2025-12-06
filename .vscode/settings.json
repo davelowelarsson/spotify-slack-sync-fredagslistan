@@ -17,5 +17,10 @@
     "statusBarItem.remoteBackground": "#68217a",
     "statusBarItem.remoteForeground": "#e7e7e7"
   },
-  "peacock.color": "#68217A"
+  "peacock.color": "#68217A",
+  "python.testing.pytestArgs": [
+    "tests"
+  ],
+  "python.testing.unittestEnabled": false,
+  "python.testing.pytestEnabled": true
 }
