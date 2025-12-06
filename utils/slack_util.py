@@ -22,7 +22,8 @@ from datetime import datetime, timedelta
 load_dotenv()
 
 
-def get_slack_client():
+def get_slack_client() -> tuple[str | None, WebClient]:
+    """Get Slack client and token from environment."""
     # Get the Slack token from the environment variable
     slack_token = os.getenv("SLACK_API_TOKEN")
 
@@ -31,7 +32,8 @@ def get_slack_client():
 
     return slack_token, client
 
-def check_slack_token():
+
+def check_slack_token() -> None:
     slack_token, client = get_slack_client()
 
     try:
@@ -86,7 +88,7 @@ def is_message_within_window(message: dict, days_back: int = 6) -> bool:
     return message_datetime >= cutoff_start_of_day
 
 
-def get_recent_slack_tracks(channel_id="CAB3JFSQN"):
+def get_recent_slack_tracks(channel_id: str = "CAB3JFSQN") -> list[dict]:
     """
     Get Spotify track IDs from recent Slack messages (within rolling window).
 
@@ -153,7 +155,7 @@ def get_recent_slack_tracks(channel_id="CAB3JFSQN"):
                             thread_message.get('text', ''))
                         for track_id in thread_track_ids:
                             add_track(track_id, thread_message['ts'])
-            except Exception as e:
-                print(f"Error fetching thread replies: {e}")
+            except SlackApiError as e:
+                print(f"Error fetching thread replies: {e.response['error']}")
 
     return spotify_links
