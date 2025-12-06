@@ -8,6 +8,8 @@
 # if yes, add to list
 # return list
 
+from __future__ import annotations
+
 # import the slack client
 from slack_sdk import WebClient
 from slack_sdk.errors import SlackApiError
@@ -42,7 +44,7 @@ def check_slack_token():
         print(f"Error validating Slack token: {e.response['error']}")
 
 
-def extract_spotify_track_ids(text):
+def extract_spotify_track_ids(text: str) -> list[str]:
     """
     Extract all Spotify track IDs from a text string.
     
@@ -61,7 +63,7 @@ def extract_spotify_track_ids(text):
     return re.findall(pattern, text)
 
 
-def is_message_from_today(message):
+def is_message_from_today(message: dict) -> bool:
     """Check if a message was posted today based on its timestamp."""
     message_date = datetime.fromtimestamp(
         int(message['ts'].split(".")[0])).strftime('%Y-%m-%d')

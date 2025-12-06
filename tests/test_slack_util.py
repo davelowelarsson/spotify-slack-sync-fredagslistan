@@ -337,6 +337,5 @@ def test_get_todays_slack_urls_no_duplicate_from_threads(mock_WebClient):
 
     # Assert - track1 should appear only once (deduplication by track_id)
     track_ids = [r['track_id'] for r in result]
-    # The function should handle duplicates - currently it may return duplicates
-    # This test documents expected behavior
-    assert 'track1' in track_ids
+    # The function deduplicates track_ids; verify only one occurrence of 'track1'
+    assert track_ids.count('track1') == 1
