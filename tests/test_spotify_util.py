@@ -308,18 +308,26 @@ class TestGetLatestTrackYear:
         mock_sp = MagicMock()
         mock_get_spotify_access_token.return_value = mock_sp
 
-        mock_sp.playlist.return_value = {
-            'tracks': {
-                'items': [
-                    {'added_at': '2024-01-15T10:00:00Z'},
-                    {'added_at': '2024-06-20T10:00:00Z'},
-                    {'added_at': '2025-01-05T10:00:00Z'},  # Latest
-                ]
-            }
+        # First call: get total count
+        mock_sp.playlist.return_value = {'tracks': {'total': 100}}
+
+        # Second call: get last 3 tracks
+        mock_sp.playlist_tracks.return_value = {
+            'items': [
+                {'added_at': '2024-12-20T10:00:00Z'},
+                {'added_at': '2024-12-25T10:00:00Z'},
+                {'added_at': '2025-01-05T10:00:00Z'},  # Latest
+            ]
         }
 
         result = get_latest_track_year('playlist123')
         assert result == 2025
+        mock_sp.playlist_tracks.assert_called_once_with(
+            'playlist123',
+            fields='items(added_at)',
+            limit=3,
+            offset=97  # 100 - 3
+        )
 
     @patch('utils.spotify_util.get_spotify_access_token')
     def test_returns_none_for_empty_playlist(self, mock_get_spotify_access_token):
@@ -327,12 +335,11 @@ class TestGetLatestTrackYear:
         mock_sp = MagicMock()
         mock_get_spotify_access_token.return_value = mock_sp
 
-        mock_sp.playlist.return_value = {
-            'tracks': {'items': []}
-        }
+        mock_sp.playlist.return_value = {'tracks': {'total': 0}}
 
         result = get_latest_track_year('playlist123')
         assert result is None
+        mock_sp.playlist_tracks.assert_not_called()
 
     @patch('utils.spotify_util.get_spotify_access_token')
     def test_handles_single_track(self, mock_get_spotify_access_token):
@@ -340,33 +347,43 @@ class TestGetLatestTrackYear:
         mock_sp = MagicMock()
         mock_get_spotify_access_token.return_value = mock_sp
 
-        mock_sp.playlist.return_value = {
-            'tracks': {
-                'items': [{'added_at': '2025-12-01T10:00:00Z'}]
-            }
+        mock_sp.playlist.return_value = {'tracks': {'total': 1}}
+        mock_sp.playlist_tracks.return_value = {
+            'items': [{'added_at': '2025-12-01T10:00:00Z'}]
         }
 
         result = get_latest_track_year('playlist123')
         assert result == 2025
+        mock_sp.playlist_tracks.assert_called_once_with(
+            'playlist123',
+            fields='items(added_at)',
+            limit=3,
+            offset=0  # max(0, 1-3) = 0
+        )
 
     @patch('utils.spotify_util.get_spotify_access_token')
-    def test_finds_latest_across_years(self, mock_get_spotify_access_token):
-        """Test finding the latest track when spanning multiple years."""
+    def test_handles_large_playlist_efficiently(self, mock_get_spotify_access_token):
+        """Test that a 1200-track playlist only fetches the last 3 tracks."""
         mock_sp = MagicMock()
         mock_get_spotify_access_token.return_value = mock_sp
 
-        mock_sp.playlist.return_value = {
-            'tracks': {
-                'items': [
-                    {'added_at': '2023-12-31T23:59:59Z'},
-                    {'added_at': '2024-12-15T10:00:00Z'},  # Latest
-                    {'added_at': '2024-01-01T00:00:01Z'},
-                ]
-            }
+        mock_sp.playlist.return_value = {'tracks': {'total': 1200}}
+        mock_sp.playlist_tracks.return_value = {
+            'items': [
+                {'added_at': '2025-12-05T10:00:00Z'},
+                {'added_at': '2025-12-06T10:00:00Z'},
+                {'added_at': '2025-12-07T10:00:00Z'},  # Latest
+            ]
         }
 
         result = get_latest_track_year('playlist123')
-        assert result == 2024
+        assert result == 2025
+        mock_sp.playlist_tracks.assert_called_once_with(
+            'playlist123',
+            fields='items(added_at)',
+            limit=3,
+            offset=1197  # 1200 - 3
+        )
 
 
 @freeze_time("2025-12-07")
@@ -394,11 +411,10 @@ def test_find_playlist_by_year_found(mock_get_spotify_access_token):
         'next': None
     }
 
-    # Mock playlist call for track validation
-    mock_sp.playlist.return_value = {
-        'tracks': {
-            'items': [{'added_at': '2025-12-01T10:00:00Z'}]
-        }
+    # Mock playlist calls for track validation (two-step: get total, then get last tracks)
+    mock_sp.playlist.return_value = {'tracks': {'total': 50}}
+    mock_sp.playlist_tracks.return_value = {
+        'items': [{'added_at': '2025-12-01T10:00:00Z'}]
     }
 
     result = find_playlist_by_year(2025)
@@ -484,9 +500,10 @@ def test_find_playlist_by_year_pagination(mock_get_spotify_access_token):
         }
     ]
 
-    # Mock playlist call for track validation
-    mock_sp.playlist.return_value = {
-        'tracks': {'items': [{'added_at': '2025-12-01T10:00:00Z'}]}
+    # Mock playlist calls for track validation (two-step: get total, then get last tracks)
+    mock_sp.playlist.return_value = {'tracks': {'total': 50}}
+    mock_sp.playlist_tracks.return_value = {
+        'items': [{'added_at': '2025-12-01T10:00:00Z'}]
     }
 
     result = find_playlist_by_year(2025)
@@ -543,6 +560,12 @@ def test_get_or_create_yearly_playlist_existing(mock_get_spotify_access_token):
             }
         ],
         'next': None
+    }
+
+    # Mock playlist calls for track validation (two-step: get total, then get last tracks)
+    mock_sp.playlist.return_value = {'tracks': {'total': 50}}
+    mock_sp.playlist_tracks.return_value = {
+        'items': [{'added_at': '2025-12-01T10:00:00Z'}]
     }
 
     result, was_created = get_or_create_yearly_playlist(2025)
