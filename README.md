@@ -1,74 +1,180 @@
-# spotify-slack-sync-fredagslistan
+# Spotify-Slack Sync: Fredagslistan 🎵
 
-## get started
-
-- Use pyenv
-```
-pyenv install
-```
-Will pick up the .python-version file and install the correct version of python
-
-- install requirements
-```
-pip install -r requirements.txt
-```
-
-- Run the program
-```
-python main.py (or in this case slack-spotify-sync.py)
-```
+Automatically syncs Spotify tracks shared in a Slack channel to a collaborative Spotify playlist. Perfect for team "Friday playlist" traditions!
 
 ## Features
-- Checks if there's a Spotify playlist for the current day. If not, it creates one.
-  This isn't done yet, it uses an existing playlist for now.
-- Retrieves the day's messages from a specified Slack channel.
-- Retrieves the current day's tracks from the Spotify playlist.
-- Compares the Slack messages with the Spotify playlist and identifies new tracks.
-- Adds any new tracks from Slack to the Spotify playlist.
-- Announces the updated playlist in Slack (once per day).
-  This isn't done yet, what should be feed back into Slack?
 
+- 🎵 **Multi-track extraction** - Captures all Spotify links from a single message
+- 💬 **Thread support** - Fetches tracks from thread replies, not just main messages
+- 📅 **6-day rolling window** - Captures the week's music leading up to Friday
+- 🔄 **Smart deduplication** - Only adds new tracks within the rolling window
+- ⏰ **Scheduled sync** - Runs automatically via GitHub Actions on Fridays
+- 📆 **Yearly playlists** - Automatically creates a new playlist for each year
+- 📢 **Slack announcements** - Posts a rich Block Kit message when a new playlist is created
+- 📝 **Topic updates** - Updates the Slack channel topic with fun rotating messages
+- 📊 **Year-end statistics** - Shows top artists, genres, and contributors from the previous year
+- 🏆 **Top contributors** - Highlights the top 5 people who shared the most tracks
+- 🎲 **Dynamic text** - Rotating fun messages for announcements, descriptions, and topics
 
-## Progress
-  - [x] Kollar på att bygga om Jonas Fredags lista grej till till en egen funktion som kör bara på fredagar och typ var 10 minut
-  - [x] jämför vad som ligger i listan och adderar bara det som är nytt
-  - [x] skriva den i typescript med tester
-  - [x] skaffa en spotify token som gäller hela tiden
-  - [x] skaffa en slack token för att kolla vad som finns i listan
-  - [x] dra ner allt i slack (som skrivits idag)
-  - [x] dra ner allt från fredagslistan (som adderats idag)
-  - [x] jämföra dom två listorna med varandra
-  - [x] ta bort allt som är samma ...
-  - [x] skicka upp det som finns kvar i array'en till spotify
+## How It Works
 
-  - [x] Check spotify token
-  - [x] Check slack token
+1. Checks if a playlist exists for the current year (`Fredagslistan YYYY 🎵`)
+2. If not, creates a new playlist and announces it in Slack (with Block Kit formatting)
+3. Fetches stats from previous year's playlist (track count, top artists, genres)
+4. Gets top 5 contributors from the previous year's Slack messages
+5. Posts a rich announcement with all the stats and a link to the new playlist
+6. Updates the Slack channel topic with the playlist link
+7. Fetches messages from Slack channel (last 6 days, including threads)
+8. Extracts Spotify track IDs from all messages
+9. Compares with tracks already in the Spotify playlist
+10. Adds new tracks to the playlist (preserving chronological order)
 
-  - [x] Get list from today in slack
-  - [x] Get list from spotify
-  - [x] Compare both lists
+## Getting Started
 
-  - [ ] Check if there is a playlist for today in spotify
-    - [ ] - If there is no playlist for today, create a new playlist, save the ID in a variable
-    - [ ] - If there is a playlist already save the id in a variable
+### Prerequisites
 
-  - [ ] Add the remaning array to spotify playlist
+- Python 3.8+
+- Slack Bot Token with these scopes:
+  - `channels:history` - Read messages from channels
+  - `chat:write` - Post announcement messages
+  - `channels:manage` - Update channel topic
+  - `users:read` - Get user display names for contributor stats
+- Spotify Developer credentials with these scopes:
+  - `playlist-read-collaborative`
+  - `playlist-modify-public`
+  - `playlist-modify-private`
 
-  - [ ] Announce the playlist in slack (only do this once per day)
-    - [ ] - Maybe add comment in thread about the number of added songs each time it runs.
+### Installation
 
+1. Clone the repository
 
-## Oauth for spotify
-urgh
-we need to authenticate with spotify and this can be done by getting the redirect url from the browserand then pasting it in when the terminal asks for it
+   ```sh
+   git clone https://github.com/davelowelarsson/spotify-slack-sync-fredagslistan.git
+   cd spotify-slack-sync-fredagslistan
+   ```
 
+2. Install Python (using pyenv)
+
+   ```sh
+   pyenv install
+   ```
+
+3. Install dependencies
+
+   ```sh
+   pip install -r requirements.txt
+   ```
+
+4. Configure environment variables
+
+   ```sh
+   cp .env.example .env
+   # Edit .env with your credentials
+   ```
+
+   Required variables:
+
+   ```bash
+   SLACK_API_TOKEN=xoxb-...
+   SPOTIPY_CLIENT_ID=...
+   SPOTIPY_CLIENT_SECRET=...
+   SPOTIPY_REDIRECT_URI=...
+   ```
+
+5. Run the sync
+
+   ```sh
+   python main.py
+   ```
+
+## Usage
+
+### Manual Run
+
+```sh
+python main.py
 ```
-Enter the URL you were redirected to:
+
+### Automated (GitHub Actions)
+
+The workflow runs every 15 minutes on Fridays between 07:00-19:00 UTC.
+
+### Running Tests
+
+```sh
+pytest                           # Run all tests
+pytest -v                        # Verbose output
+pytest tests/test_slack_util.py  # Specific test file
 ```
 
-Paste in something like this
-```
-slack-spotify-sync://callback/?code=AQD0EADQNOg_646wy3ZssMNYoBxKHZR9Oq1AlWx8LyJeSKnfJ4iOrTx55JDCOU5C6sTsCH1Z5k__CIsh2eApEVE-qzHXh37t0WhFAmfw-Xl94-K2L0Nb4G_2BIQoWovDl7ahGYT-goO-uNU90Hd0UaDmRAnQe4Y8d5f-m-HqcybSJLL-qvxMy4UwCnqMica1tYqoyZVLZ0RIxI6q-gkrfHP96zDKBgW37bTiypViaBz_75V66wA
-```
+## Built With
 
-![](images/2024-02-09-14-39-03.png)
+- [![Python][Python-badge]][Python-url] - Programming language
+- [![Spotify][Spotify-badge]][Spotify-url] - Music platform API (via spotipy)
+- [![Slack][Slack-badge]][Slack-url] - Messaging platform API (via slack_sdk)
+
+## Roadmap
+
+- [x] Extract multiple Spotify links from single message
+- [x] Support thread message extraction
+- [x] 6-day rolling window for captures
+- [x] Type hints throughout codebase
+- [x] Comprehensive test coverage (103 tests)
+- [x] Create new playlist automatically for each year
+- [x] Announce playlist in Slack (with Block Kit)
+- [x] Update channel topic with playlist link
+- [x] Track statistics (track count, top artists, genres)
+- [x] Top contributors leaderboard with medals
+- [x] Dynamic rotating text for all announcements
+- [x] User attribution tracking (who shared what)
+- [ ] Handle albums and playlist links (not just tracks)
+
+## Spotify OAuth
+
+First-time setup requires manual OAuth authentication:
+
+1. Run `python main.py`
+2. A browser window opens for Spotify authorization
+3. After authorizing, copy the redirect URL
+4. Paste in terminal when prompted:
+
+   ```text
+   Enter the URL you were redirected to:
+   ```
+
+   Example URL:
+
+   ```text
+   slack-spotify-sync://callback/?code=AQD0EADQNOg...
+   ```
+
+![OAuth Flow](images/2024-02-09-14-39-03.png)
+
+## Contributing
+
+1. Fork the Project
+2. Create your Feature Branch (`git checkout -b feature/AmazingFeature`)
+3. Write tests first (TDD approach)
+4. Commit your Changes (`git commit -m 'Add some AmazingFeature'`)
+5. Push to the Branch (`git push origin feature/AmazingFeature`)
+6. Open a Pull Request
+
+## License
+
+Distributed under the MIT License.
+
+## Acknowledgments
+
+- Original concept by Jonas for the Friday playlist tradition
+- [spotipy](https://spotipy.readthedocs.io/) - Spotify Web API wrapper
+- [slack_sdk](https://slack.dev/python-slack-sdk/) - Slack API client
+
+---
+
+<!-- Badge definitions -->
+[Python-badge]: https://img.shields.io/badge/Python-3776AB?style=for-the-badge&logo=python&logoColor=white
+[Python-url]: https://www.python.org/
+[Spotify-badge]: https://img.shields.io/badge/Spotify-1DB954?style=for-the-badge&logo=spotify&logoColor=white
+[Spotify-url]: https://developer.spotify.com/
+[Slack-badge]: https://img.shields.io/badge/Slack-4A154B?style=for-the-badge&logo=slack&logoColor=white
+[Slack-url]: https://api.slack.com/
