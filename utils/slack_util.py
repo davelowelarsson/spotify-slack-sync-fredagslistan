@@ -16,6 +16,7 @@ from slack_sdk.errors import SlackApiError
 import os
 from dotenv import load_dotenv
 import re
+from collections import Counter
 from datetime import datetime, timedelta, timezone
 from typing import Optional
 
@@ -248,8 +249,6 @@ def get_year_contributors(
         List of dicts with 'user_id', 'user_name', and 'track_count' keys,
         sorted by track_count descending
     """
-    from collections import Counter
-    
     slack_token, client = get_slack_client()
     
     # Calculate start and end timestamps for the year

@@ -17,6 +17,7 @@ from utils.texts import (
     get_random_stats_intro,
     format_top_genres,
     format_top_artists,
+    format_top_contributors,
 )
 from utils.spotify_util import extract_year_from_playlist_name
 import re
@@ -201,13 +202,11 @@ class TestFormatTopContributors:
     
     def test_format_empty_list(self):
         """Empty list should return a message."""
-        from utils.texts import format_top_contributors
         result = format_top_contributors([])
         assert "Ingen bidragsdata" in result
     
     def test_format_single_contributor(self):
         """Single contributor should get gold medal."""
-        from utils.texts import format_top_contributors
         contributors = [{'user_name': 'Alice', 'track_count': 42}]
         result = format_top_contributors(contributors)
         assert "🥇" in result
@@ -216,7 +215,6 @@ class TestFormatTopContributors:
     
     def test_format_top_three_with_medals(self):
         """Top 3 should have gold, silver, bronze medals."""
-        from utils.texts import format_top_contributors
         contributors = [
             {'user_name': 'Alice', 'track_count': 42},
             {'user_name': 'Bob', 'track_count': 38},
@@ -232,7 +230,6 @@ class TestFormatTopContributors:
     
     def test_format_more_than_three_uses_numbers(self):
         """4th and 5th should use numbers instead of medals."""
-        from utils.texts import format_top_contributors
         contributors = [
             {'user_name': 'Alice', 'track_count': 42},
             {'user_name': 'Bob', 'track_count': 38},
@@ -246,7 +243,6 @@ class TestFormatTopContributors:
     
     def test_respects_limit(self):
         """Should respect the limit parameter."""
-        from utils.texts import format_top_contributors
         contributors = [
             {'user_name': f'User{i}', 'track_count': 10 - i}
             for i in range(10)

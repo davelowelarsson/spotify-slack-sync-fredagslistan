@@ -10,7 +10,7 @@ from utils.texts import (
 from datetime import datetime, timedelta, timezone
 from spotipy import SpotifyException
 import re
-from typing import Optional, Tuple
+from typing import Optional
 from collections import Counter
 
 
@@ -36,8 +36,7 @@ def get_latest_track_year(playlist_id: str) -> Optional[int]:
     sp = get_spotify_access_token()
     
     try:
-        # Get just the first (most recent) track - Spotify returns in reverse chronological order
-        # Actually, Spotify returns in order of addition, so we need to get all and find the latest
+        # Spotify returns tracks in order of addition, so we need to scan all to find the latest
         playlist = sp.playlist(playlist_id, fields='tracks.items(added_at)')
         items = playlist.get('tracks', {}).get('items', [])
         

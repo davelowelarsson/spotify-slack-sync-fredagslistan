@@ -171,6 +171,40 @@ def get_random_stats_intro(playlist_name: str, track_count: int) -> str:
     return template.format(playlist_name=playlist_name, track_count=track_count)
 
 
+# =============================================================================
+# GENRE EMOJI MAPPING
+# =============================================================================
+# Used by format_top_genres to add appropriate emojis
+
+GENRE_EMOJI_MAP = {
+    'rock': '🎸',
+    'pop': '🎵',
+    'electronic': '🎧',
+    'hip hop': '🎤',
+    'rap': '🎤',
+    'r&b': '💜',
+    'soul': '💜',
+    'jazz': '🎷',
+    'classical': '🎻',
+    'country': '🤠',
+    'metal': '🤘',
+    'punk': '🤘',
+    'indie': '✨',
+    'alternative': '✨',
+    'dance': '💃',
+    'reggae': '🌴',
+    'blues': '🎺',
+    'folk': '🪕',
+    'latin': '💃',
+    'k-pop': '🇰🇷',
+    'swedish': '🇸🇪',
+}
+
+
+# =============================================================================
+# FORMATTING FUNCTIONS
+# =============================================================================
+
 def format_top_genres(genres: list[str], limit: int = 5) -> str:
     """
     Format a list of top genres into a readable string.
@@ -185,37 +219,12 @@ def format_top_genres(genres: list[str], limit: int = 5) -> str:
     if not genres:
         return "Ingen genredata tillgänglig"
     
-    # Genre emoji mapping
-    genre_emojis = {
-        'rock': '🎸',
-        'pop': '🎵',
-        'electronic': '🎧',
-        'hip hop': '🎤',
-        'rap': '🎤',
-        'r&b': '💜',
-        'soul': '💜',
-        'jazz': '🎷',
-        'classical': '🎻',
-        'country': '🤠',
-        'metal': '🤘',
-        'punk': '🤘',
-        'indie': '✨',
-        'alternative': '✨',
-        'dance': '💃',
-        'reggae': '🌴',
-        'blues': '🎺',
-        'folk': '🪕',
-        'latin': '💃',
-        'k-pop': '🇰🇷',
-        'swedish': '🇸🇪',
-    }
-    
     formatted = []
     for genre in genres[:limit]:
         genre_lower = genre.lower()
         # Find matching emoji
         emoji = '🎵'  # Default
-        for key, value in genre_emojis.items():
+        for key, value in GENRE_EMOJI_MAP.items():
             if key in genre_lower:
                 emoji = value
                 break
