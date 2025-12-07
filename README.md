@@ -99,6 +99,7 @@ python main.py
 
 The workflow runs every 15 minutes on Fridays between 07:00-19:00 UTC.
 
+
 ### Running Tests
 
 ```sh
