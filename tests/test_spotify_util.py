@@ -12,8 +12,8 @@ from utils.spotify_util import (
     create_yearly_playlist,
     get_or_create_yearly_playlist,
     get_current_year,
+    get_latest_track_year,
 )
-from utils.texts import PLAYLIST_NAME_PATTERN
 from freezegun import freeze_time
 
 
@@ -225,8 +225,8 @@ class TestPlaylistNaming:
     def test_generate_playlist_name_default_year(self):
         """Test playlist name generation with default (current) year."""
         name = generate_playlist_name()
-        # Should match the pattern and contain 2025
-        assert re.match(PLAYLIST_NAME_PATTERN, name) is not None
+        # Should extract year correctly and contain 2025
+        assert extract_year_from_playlist_name(name) == 2025
         assert '2025' in name
         assert 'Fredagslistan' in name
 
@@ -235,10 +235,10 @@ class TestPlaylistNaming:
         name_2024 = generate_playlist_name(2024)
         name_2023 = generate_playlist_name(2023)
 
-        # Both should match the pattern and contain their respective years
-        assert re.match(PLAYLIST_NAME_PATTERN, name_2024) is not None
+        # Both should extract correctly and contain their respective years
+        assert extract_year_from_playlist_name(name_2024) == 2024
         assert '2024' in name_2024
-        assert re.match(PLAYLIST_NAME_PATTERN, name_2023) is not None
+        assert extract_year_from_playlist_name(name_2023) == 2023
         assert '2023' in name_2023
 
     @freeze_time("2025-12-07")
@@ -277,14 +277,96 @@ class TestPlaylistNaming:
         # Note: "Fredagslistan2025" now matches (pattern is more permissive)
 
     def test_extract_year_from_old_format(self):
-        """Test extracting year from old naming convention with exclamation marks."""
-        # Old format: "Fredagslistan ! 2024-25 !"
+        """Test extracting year from old naming convention with exclamation marks.
+        
+        Multi-year formats like "2024-25" extract the LATEST year (2025).
+        """
+        # Old format: "Fredagslistan ! 2024-25 !" -> extracts 2025 (the latest year)
         assert extract_year_from_playlist_name(
-            "Fredagslistan ! 2024-25 !") == 2024
+            "Fredagslistan ! 2024-25 !") == 2025
         assert extract_year_from_playlist_name(
-            "Fredagslistan! 2023-24!") == 2023
+            "Fredagslistan! 2023-24!") == 2024
+        # Single year format still works
         assert extract_year_from_playlist_name(
             "Fredagslistan ! 2022 !") == 2022
+
+    def test_extract_year_from_multi_year_format(self):
+        """Test extracting year from multi-year formats."""
+        # "YYYY-YY" format extracts the latest year
+        assert extract_year_from_playlist_name("Fredagslistan 2024-25") == 2025
+        assert extract_year_from_playlist_name("Fredagslistan 2019-20") == 2020
+        assert extract_year_from_playlist_name(
+            "Fredagslistan 1999-00") == 2000  # Century rollover
+
+
+class TestGetLatestTrackYear:
+    """Tests for get_latest_track_year function."""
+
+    @patch('utils.spotify_util.get_spotify_access_token')
+    def test_returns_year_from_latest_track(self, mock_get_spotify_access_token):
+        """Test extracting year from the most recently added track."""
+        mock_sp = MagicMock()
+        mock_get_spotify_access_token.return_value = mock_sp
+
+        mock_sp.playlist.return_value = {
+            'tracks': {
+                'items': [
+                    {'added_at': '2024-01-15T10:00:00Z'},
+                    {'added_at': '2024-06-20T10:00:00Z'},
+                    {'added_at': '2025-01-05T10:00:00Z'},  # Latest
+                ]
+            }
+        }
+
+        result = get_latest_track_year('playlist123')
+        assert result == 2025
+
+    @patch('utils.spotify_util.get_spotify_access_token')
+    def test_returns_none_for_empty_playlist(self, mock_get_spotify_access_token):
+        """Test returns None for playlist with no tracks."""
+        mock_sp = MagicMock()
+        mock_get_spotify_access_token.return_value = mock_sp
+
+        mock_sp.playlist.return_value = {
+            'tracks': {'items': []}
+        }
+
+        result = get_latest_track_year('playlist123')
+        assert result is None
+
+    @patch('utils.spotify_util.get_spotify_access_token')
+    def test_handles_single_track(self, mock_get_spotify_access_token):
+        """Test with a single track in the playlist."""
+        mock_sp = MagicMock()
+        mock_get_spotify_access_token.return_value = mock_sp
+
+        mock_sp.playlist.return_value = {
+            'tracks': {
+                'items': [{'added_at': '2025-12-01T10:00:00Z'}]
+            }
+        }
+
+        result = get_latest_track_year('playlist123')
+        assert result == 2025
+
+    @patch('utils.spotify_util.get_spotify_access_token')
+    def test_finds_latest_across_years(self, mock_get_spotify_access_token):
+        """Test finding the latest track when spanning multiple years."""
+        mock_sp = MagicMock()
+        mock_get_spotify_access_token.return_value = mock_sp
+
+        mock_sp.playlist.return_value = {
+            'tracks': {
+                'items': [
+                    {'added_at': '2023-12-31T23:59:59Z'},
+                    {'added_at': '2024-12-15T10:00:00Z'},  # Latest
+                    {'added_at': '2024-01-01T00:00:01Z'},
+                ]
+            }
+        }
+
+        result = get_latest_track_year('playlist123')
+        assert result == 2024
 
 
 @freeze_time("2025-12-07")
@@ -312,6 +394,13 @@ def test_find_playlist_by_year_found(mock_get_spotify_access_token):
         'next': None
     }
 
+    # Mock playlist call for track validation
+    mock_sp.playlist.return_value = {
+        'tracks': {
+            'items': [{'added_at': '2025-12-01T10:00:00Z'}]
+        }
+    }
+
     result = find_playlist_by_year(2025)
 
     assert result is not None
@@ -319,6 +408,34 @@ def test_find_playlist_by_year_found(mock_get_spotify_access_token):
     assert 'Fredagslistan' in result['name']
     assert '2025' in result['name']
     assert 'playlist123' in result['url']
+
+
+@freeze_time("2025-12-07")
+@patch('utils.spotify_util.get_spotify_access_token')
+def test_find_playlist_by_year_found_without_validation(mock_get_spotify_access_token):
+    """Test finding an existing playlist by year without track validation."""
+    mock_sp = MagicMock()
+    mock_get_spotify_access_token.return_value = mock_sp
+
+    mock_sp.current_user_playlists.return_value = {
+        'items': [
+            {
+                'id': 'playlist123',
+                'name': 'Fredagslistan 2025 🎵',
+                'external_urls': {'spotify': 'https://open.spotify.com/playlist/playlist123'},
+                'description': 'UR pepp 2025 🔥'
+            }
+        ],
+        'next': None
+    }
+
+    # Don't need to mock playlist call when validation is disabled
+    result = find_playlist_by_year(2025, validate_with_tracks=False)
+
+    assert result is not None
+    assert result['id'] == 'playlist123'
+    # playlist() should not have been called
+    mock_sp.playlist.assert_not_called()
 
 
 @freeze_time("2025-12-07")
@@ -366,6 +483,11 @@ def test_find_playlist_by_year_pagination(mock_get_spotify_access_token):
             'next': None
         }
     ]
+
+    # Mock playlist call for track validation
+    mock_sp.playlist.return_value = {
+        'tracks': {'items': [{'added_at': '2025-12-01T10:00:00Z'}]}
+    }
 
     result = find_playlist_by_year(2025)
 

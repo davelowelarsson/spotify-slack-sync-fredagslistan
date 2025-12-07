@@ -2,20 +2,65 @@ from __future__ import annotations
 
 from utils.spotify_access_token import get_spotify_access_token
 from utils.texts import (
-    PLAYLIST_NAME_PATTERN,
+    PLAYLIST_NAME_PREFIX_PATTERN,
+    PLAYLIST_YEAR_PATTERN,
     get_random_playlist_name,
     get_random_playlist_description,
 )
 from datetime import datetime, timedelta, timezone
 from spotipy import SpotifyException
 import re
-from typing import Optional
+from typing import Optional, Tuple
 from collections import Counter
 
 
 def get_current_year() -> int:
     """Get the current year."""
     return datetime.now(tz=timezone.utc).year
+
+
+def get_latest_track_year(playlist_id: str) -> Optional[int]:
+    """
+    Get the year of the most recently added track in a playlist.
+    
+    This is used to validate that a playlist is still active for the
+    expected year. For example, if the name suggests 2025 but the last
+    track was added in 2024, the playlist is probably for 2024.
+    
+    Args:
+        playlist_id: Spotify playlist ID
+    
+    Returns:
+        The year of the most recently added track, or None if playlist is empty
+    """
+    sp = get_spotify_access_token()
+    
+    try:
+        # Get just the first (most recent) track - Spotify returns in reverse chronological order
+        # Actually, Spotify returns in order of addition, so we need to get all and find the latest
+        playlist = sp.playlist(playlist_id, fields='tracks.items(added_at)')
+        items = playlist.get('tracks', {}).get('items', [])
+        
+        if not items:
+            return None
+        
+        # Find the most recent added_at date
+        latest_date = None
+        for item in items:
+            added_at = item.get('added_at')
+            if added_at:
+                # Parse ISO 8601 format: "2024-12-06T15:30:00Z"
+                track_date = datetime.fromisoformat(added_at.replace('Z', '+00:00'))
+                if latest_date is None or track_date > latest_date:
+                    latest_date = track_date
+        
+        if latest_date:
+            return latest_date.year
+        
+        return None
+    except SpotifyException as e:
+        print(f"Error fetching playlist tracks: {e}")
+        return None
 
 
 def generate_playlist_name(year: Optional[int] = None) -> str:
@@ -53,6 +98,12 @@ def extract_year_from_playlist_name(name: str) -> Optional[int]:
     Extract the year from a playlist name.
     
     Matches any playlist starting with 'Fredagslistan' followed by a year.
+    Handles multi-year formats like "2024-25" by extracting the latest year.
+    
+    Examples:
+        - "Fredagslistan 2025 🎵" -> 2025
+        - "Fredagslistan ! 2024-25 !" -> 2025 (extracts 2024, adds suffix 25 -> 2025)
+        - "Fredagslistan 2024" -> 2024
     
     Args:
         name: Playlist name to parse
@@ -60,21 +111,49 @@ def extract_year_from_playlist_name(name: str) -> Optional[int]:
     Returns:
         The year as an integer, or None if the name doesn't match the pattern
     """
-    match = re.match(PLAYLIST_NAME_PATTERN, name)
+    # First, verify it starts with Fredagslistan
+    if not re.match(PLAYLIST_NAME_PREFIX_PATTERN, name):
+        return None
+
+    # Find years in the name (handles "2024-25" format)
+    match = re.search(PLAYLIST_YEAR_PATTERN, name)
     if match:
-        return int(match.group(1))
+        base_year = int(match.group(1))
+        suffix = match.group(2)  # e.g., "25" from "2024-25"
+
+        if suffix:
+            # Convert 2-digit suffix to full year (e.g., 25 -> 2025)
+            # Take century from base_year
+            century = (base_year // 100) * 100
+            suffix_year = century + int(suffix)
+
+            # Handle century rollover (e.g., 1999-00 -> 2000)
+            if suffix_year < base_year:
+                suffix_year += 100
+
+            return suffix_year
+
+        return base_year
+
     return None
 
 
-def find_playlist_by_year(year: Optional[int] = None) -> Optional[dict]:
+def find_playlist_by_year(year: Optional[int] = None, validate_with_tracks: bool = True) -> Optional[dict]:
     """
     Find a Fredagslistan playlist for a specific year.
     
     Searches through the current user's playlists to find one matching
     the naming convention 'Fredagslistan YYYY' (with any suffix).
     
+    When validate_with_tracks is True, also checks the most recently added
+    track to validate the playlist is still active for the expected year.
+    This helps handle edge cases like "Fredagslistan 2024-25" where the
+    name suggests 2025 but if no tracks were added in 2025 yet, it means
+    the playlist is still effectively for 2024.
+    
     Args:
         year: The year to search for. Defaults to current year.
+        validate_with_tracks: If True, validate using latest track date.
     
     Returns:
         Playlist dict with id, name, url, and description, or None if not found
@@ -83,6 +162,9 @@ def find_playlist_by_year(year: Optional[int] = None) -> Optional[dict]:
         year = get_current_year()
 
     sp = get_spotify_access_token()
+
+    # Collect candidate playlists that match by name
+    candidates = []
 
     # Paginate through all user playlists
     offset = 0
@@ -99,12 +181,12 @@ def find_playlist_by_year(year: Optional[int] = None) -> Optional[dict]:
             # Check if this playlist matches the year using pattern matching
             playlist_year = extract_year_from_playlist_name(playlist['name'])
             if playlist_year == year:
-                return {
+                candidates.append({
                     'id': playlist['id'],
                     'name': playlist['name'],
                     'url': playlist['external_urls']['spotify'],
                     'description': playlist.get('description', '')
-                }
+                })
 
         # Check if there are more playlists
         if results.get('next') is None:
@@ -112,7 +194,41 @@ def find_playlist_by_year(year: Optional[int] = None) -> Optional[dict]:
 
         offset += limit
 
-    return None
+    # No candidates found
+    if not candidates:
+        return None
+
+    # If we only have one candidate, use it (with optional validation)
+    if len(candidates) == 1:
+        candidate = candidates[0]
+        
+        if validate_with_tracks:
+            latest_track_year = get_latest_track_year(candidate['id'])
+            if latest_track_year is not None:
+                print(f"📅 Playlist '{candidate['name']}' - name suggests {year}, latest track from {latest_track_year}")
+                
+                # If the latest track is from the previous year and we're early in the new year,
+                # this is expected - the playlist is valid for the new year
+                if latest_track_year == year or latest_track_year == year - 1:
+                    return candidate
+                else:
+                    print(f"⚠️ Warning: Playlist may not match expected year (expected {year}, got {latest_track_year})")
+            else:
+                print(f"📅 Playlist '{candidate['name']}' is empty, assuming it's for {year}")
+        
+        return candidate
+
+    # Multiple candidates - prefer the one with tracks from the target year
+    print(f"Found {len(candidates)} candidate playlists for {year}")
+    for candidate in candidates:
+        latest_track_year = get_latest_track_year(candidate['id'])
+        if latest_track_year == year:
+            print(f"✅ Selected '{candidate['name']}' (has tracks from {year})")
+            return candidate
+
+    # Fallback to first candidate if no perfect match
+    print(f"Using first candidate: '{candidates[0]['name']}'")
+    return candidates[0]
 
 
 def create_yearly_playlist(year: Optional[int] = None) -> dict:

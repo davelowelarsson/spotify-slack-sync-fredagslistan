@@ -30,9 +30,12 @@ PLAYLIST_NAME_TEMPLATES = [
     "Fredagslistan {year} 🎤",
 ]
 
-# Pattern for matching playlist names (captures the year)
+# Pattern for matching playlist names
 # Matches both new format "Fredagslistan 2025 🎵" and old format "Fredagslistan ! 2024-25 !"
-PLAYLIST_NAME_PATTERN = r'^Fredagslistan\s*!?\s*(\d{4})'
+# First pattern: Verify it starts with Fredagslistan
+PLAYLIST_NAME_PREFIX_PATTERN = r'^Fredagslistan\s*!?\s*'
+# Second pattern: Find all 4-digit years or 2-digit year suffixes (e.g., "2024-25" -> 2024, 25)
+PLAYLIST_YEAR_PATTERN = r'(\d{4})(?:-(\d{2}))?'
 
 
 # =============================================================================

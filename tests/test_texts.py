@@ -2,7 +2,8 @@
 import pytest
 from utils.texts import (
     PLAYLIST_NAME_TEMPLATES,
-    PLAYLIST_NAME_PATTERN,
+    PLAYLIST_NAME_PREFIX_PATTERN,
+    PLAYLIST_YEAR_PATTERN,
     PLAYLIST_DESCRIPTION_TEMPLATES,
     SLACK_TOPIC_TEMPLATES,
     ANNOUNCEMENT_HEADER_TEMPLATES,
@@ -17,6 +18,7 @@ from utils.texts import (
     format_top_genres,
     format_top_artists,
 )
+from utils.spotify_util import extract_year_from_playlist_name
 import re
 
 
@@ -39,12 +41,11 @@ class TestPlaylistNameTemplates:
         assert "2025" in name
     
     def test_get_random_playlist_name_matches_pattern(self):
-        """Generated playlist name should match the pattern."""
+        """Generated playlist name should extract year correctly."""
         for _ in range(20):  # Test multiple random names
             name = get_random_playlist_name(2025)
-            match = re.match(PLAYLIST_NAME_PATTERN, name)
-            assert match is not None, f"Name doesn't match pattern: {name}"
-            assert match.group(1) == "2025"
+            year = extract_year_from_playlist_name(name)
+            assert year == 2025, f"Name doesn't extract year correctly: {name}"
     
     def test_templates_list_not_empty(self):
         """Template list should have entries."""

@@ -16,7 +16,7 @@ from datetime import datetime
 FREDAGSLISTAN_CHANNEL_ID = "CAB3JFSQN"  # Production channel
 TEST_CHANNEL_ID = "C0A2V5D0VG8"  # Test channel
 
-# Use test channel during development
+# Active channel for sync operations
 ACTIVE_CHANNEL_ID = FREDAGSLISTAN_CHANNEL_ID
 
 
