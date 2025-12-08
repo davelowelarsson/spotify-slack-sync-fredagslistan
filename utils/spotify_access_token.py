@@ -7,15 +7,14 @@ from dotenv import load_dotenv
 import os
 import requests
 
-from datetime import datetime
-
-# try loading from .env file but use ENV variable if it exists
+# Load environment variables from .env file (if exists)
+# Spotipy reads SPOTIPY_CLIENT_ID, SPOTIPY_CLIENT_SECRET, SPOTIPY_REDIRECT_URI automatically
 load_dotenv()
 
-# load in the envs from the environment if they are set
-spotify_client_id = os.getenv("SPOTIFY_CLIENT_ID")
-spotify_client_secret = os.getenv("SPOTIFY_CLIENT_SECRET")
-spotify_redirect_uri = os.getenv("SPOTIFY_REDIRECT_URI")
+# Cached Spotify client instance (singleton pattern)
+_spotify_client: spotipy.Spotify | None = None
+_token_validated: bool = False
+
 
 def check_spotify_token(spotify_token):
     spotify_token = spotify_token or os.getenv("SPOTIFY_API_TOKEN")
@@ -35,32 +34,30 @@ def check_spotify_token(spotify_token):
         print(f"Spotify token is invalid. Error: {response.json()}")
 
 
-def get_spotify_access_token():
-    # pull in environment variables and set them if they exist
-    # print('Spotify client id: ', os.getenv("SPOTIPY_CLIENT_ID"))
-    # print('Spotify client secret: ', os.getenv("SPOTIPY_CLIENT_SECRET"))
-    # print('Spotify redirect uri: ', os.getenv("SPOTIPY_REDIRECT_URI"))
+def get_spotify_access_token() -> spotipy.Spotify:
+    """
+    Get or create a cached Spotify client instance (singleton pattern).
+    
+    This function creates the Spotify client once and reuses it for all
+    subsequent calls. The token is validated only on first call to avoid
+    duplicate log messages.
+    
+    Returns:
+        A configured Spotipy client instance
+    """
+    global _spotify_client, _token_validated
+
+    # Return cached client if already created
+    if _spotify_client is not None:
+        return _spotify_client
 
     scope = 'playlist-read-collaborative playlist-modify-public playlist-modify-private'
-    sp = spotipy.Spotify(auth_manager=SpotifyOAuth(scope=scope))
+    _spotify_client = spotipy.Spotify(auth_manager=SpotifyOAuth(scope=scope))
 
-    # print('Spotify token: ', sp.auth_manager.get_access_token())
-    # ex.
-    # spotify token:
-    # {
-    # 'access_token': 'BQDFkngd_TMgcHLRsIuaeX5QQvDm58_qk3V-nWm_0_J_-7GCXyhsXxVtsRXQSrsto3m-yAhsoLcHPXrCoBHn8_SYoA9EuhDagNqu1ke0MQIKud5ZTgQzWhpB3Xa8L55ebS1bU4aygQ-mFMeLd6xILTxlyve_iXT1v7p4RJX_L9NnbEv8TmmLUaTgcm36vPBPt_uFNps9Klq6ww',
-    # 'token_type': 'Bearer',
-    # 'expires_in': 3600,
-    # 'refresh_token': 'AQB6X7hwVkU3co10ythQFkyv0WXRP8wQgUX9TgzavojwrGxBkdB7EDx6rsTvzibFKmHmuWAvrNoaMDnWOh-DHHEoOdtXksooh3Z2nnNL6p8BQmTUtRk3vmwUJ9ZH--uBa3w',
-    # 'scope': 'playlist-read-collaborative playlist-modify-public',
-    # 'expires_at': 1707489467
-    # }
+    # Validate token only once
+    if not _token_validated:
+        spotify_token = _spotify_client.auth_manager.get_access_token()
+        check_spotify_token(spotify_token)
+        _token_validated = True
 
-    spotify_token = sp.auth_manager.get_access_token()
-
-    # # print permissions for the token
-    # print(sp.me())
-
-    check_spotify_token(spotify_token)
-
-    return sp
+    return _spotify_client
