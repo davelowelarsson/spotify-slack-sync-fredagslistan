@@ -7,7 +7,6 @@ All templates support {year} and {url} placeholders where applicable.
 """
 
 import random
-from typing import Optional
 
 
 # =============================================================================
