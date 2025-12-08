@@ -8,8 +8,6 @@
 # if yes, add to list
 # return list
 
-from __future__ import annotations
-
 # import the slack client
 from slack_sdk import WebClient
 from slack_sdk.errors import SlackApiError
