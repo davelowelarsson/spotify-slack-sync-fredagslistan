@@ -1,6 +1,5 @@
 # start by getting spotify access-token
 # import the file and runt the function
-from __future__ import annotations
 
 from utils.spotify_util import (
     get_playlist,

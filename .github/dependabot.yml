@@ -1,0 +1,51 @@
+# Dependabot configuration file for automated dependency updates
+# See: https://docs.github.com/en/code-security/dependabot/dependabot-version-updates
+
+version: 2
+updates:
+  # Python dependencies (pip)
+  - package-ecosystem: "pip"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "09:00"
+      timezone: "Europe/Stockholm"
+    # Group ALL dependencies into a single PR to minimize noise
+    groups:
+      all-python-dependencies:
+        patterns:
+          - "*"  # Match all dependencies
+        update-types:
+          - "minor"
+          - "patch"
+    # Limit open PRs (1 grouped + potential major updates)
+    open-pull-requests-limit: 3
+    # Commit message preferences
+    commit-message:
+      prefix: "deps"
+      include: "scope"
+    # Labels to add to PRs
+    labels:
+      - "dependencies"
+      - "python"
+
+  # GitHub Actions - group all actions together
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "09:00"
+      timezone: "Europe/Stockholm"
+    groups:
+      all-github-actions:
+        patterns:
+          - "*"  # Match all actions
+    open-pull-requests-limit: 2
+    commit-message:
+      prefix: "ci"
+      include: "scope"
+    labels:
+      - "dependencies"
+      - "github-actions"

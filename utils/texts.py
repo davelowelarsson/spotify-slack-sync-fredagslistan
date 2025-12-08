@@ -5,7 +5,6 @@ This module contains all the fun, dynamic text templates used throughout
 the application for playlist names, descriptions, Slack topics, and announcements.
 All templates support {year} and {url} placeholders where applicable.
 """
-from __future__ import annotations
 
 import random
 from typing import Optional
