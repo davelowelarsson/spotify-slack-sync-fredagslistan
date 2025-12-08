@@ -33,7 +33,7 @@ Automatically syncs Spotify tracks shared in a Slack channel to a collaborative 
 
 ### Prerequisites
 
-- Python 3.8+
+- Python 3.13+ (managed via [mise](https://mise.jdx.dev/) or pyenv)
 - Slack Bot Token with these scopes:
   - `channels:history` - Read messages from channels
   - `chat:write` - Post announcement messages
@@ -53,7 +53,13 @@ Automatically syncs Spotify tracks shared in a Slack channel to a collaborative 
    cd spotify-slack-sync-fredagslistan
    ```
 
-2. Install Python (using pyenv)
+2. Install Python (using mise)
+
+   ```sh
+   mise install
+   ```
+
+   Or using pyenv:
 
    ```sh
    pyenv install
@@ -120,7 +126,7 @@ pytest tests/test_slack_util.py  # Specific test file
 - [x] Support thread message extraction
 - [x] 6-day rolling window for captures
 - [x] Type hints throughout codebase
-- [x] Comprehensive test coverage (103 tests)
+- [x] Comprehensive test coverage (109 tests)
 - [x] Create new playlist automatically for each year
 - [x] Announce playlist in Slack (with Block Kit)
 - [x] Update channel topic with playlist link
