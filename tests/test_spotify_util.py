@@ -57,11 +57,11 @@ class TestIsTrackWithinWindow:
         assert is_track_within_window('2021-11-07T12:00:00Z') is False
 
 
-@patch('utils.spotify_util.get_spotify_access_token')
-def test_add_songs_to_spotify_playlist(mock_get_spotify_access_token):
+@patch('utils.spotify_util.get_spotify_client')
+def test_add_songs_to_spotify_playlist(mock_get_spotify_client):
     # Arrange
     mock_sp = MagicMock()
-    mock_get_spotify_access_token.return_value = mock_sp
+    mock_get_spotify_client.return_value = mock_sp
     playlist_id = '1OdSuwMRWtpP0nVhLffEqe'
     track_ids = ['track1', 'track2', 'track3']
 
@@ -69,15 +69,15 @@ def test_add_songs_to_spotify_playlist(mock_get_spotify_access_token):
     add_songs_to_spotify_playlist(playlist_id, track_ids)
 
     # Assert
-    mock_get_spotify_access_token.assert_called_once()
+    mock_get_spotify_client.assert_called_once()
     mock_sp.playlist_add_items.assert_called_once_with(playlist_id, track_ids)
 
 
-@patch('utils.spotify_util.get_spotify_access_token')
-def test_add_songs_to_spotify_playlist_single_track(mock_get_spotify_access_token):
+@patch('utils.spotify_util.get_spotify_client')
+def test_add_songs_to_spotify_playlist_single_track(mock_get_spotify_client):
     # Arrange
     mock_sp = MagicMock()
-    mock_get_spotify_access_token.return_value = mock_sp
+    mock_get_spotify_client.return_value = mock_sp
     playlist_id = '1OdSuwMRWtpP0nVhLffEqe'
     track_id = 'track1'
 
@@ -85,17 +85,17 @@ def test_add_songs_to_spotify_playlist_single_track(mock_get_spotify_access_toke
     add_songs_to_spotify_playlist(playlist_id, track_id)
 
     # Assert
-    mock_get_spotify_access_token.assert_called_once()
+    mock_get_spotify_client.assert_called_once()
     mock_sp.playlist_add_items.assert_called_once_with(playlist_id, [track_id])
 
 
 # Friday - tracks from 2022-01-01 onwards are within 6 days
 @freeze_time("2022-01-07")
-@patch('utils.spotify_util.get_spotify_access_token')
-def test_get_playlist(mock_get_spotify_access_token):
+@patch('utils.spotify_util.get_spotify_client')
+def test_get_playlist(mock_get_spotify_client):
     # Arrange
     mock_sp = MagicMock()
-    mock_get_spotify_access_token.return_value = mock_sp
+    mock_get_spotify_client.return_value = mock_sp
     playlist_id = '1OdSuwMRWtpP0nVhLffEqe'
 
     # Mock the Spotify client - all tracks within the 6-day window
@@ -120,17 +120,17 @@ def test_get_playlist(mock_get_spotify_access_token):
     result = get_playlist(playlist_id)
 
     # Assert
-    mock_get_spotify_access_token.assert_called_once()
+    mock_get_spotify_client.assert_called_once()
     mock_sp.playlist.assert_called_once_with(playlist_id)
     assert len(result) == 2
 
 
 @freeze_time("2022-01-07")  # Friday
-@patch('utils.spotify_util.get_spotify_access_token')
-def test_get_playlist_with_mocked_results(mock_get_spotify_access_token):
+@patch('utils.spotify_util.get_spotify_client')
+def test_get_playlist_with_mocked_results(mock_get_spotify_client):
     # Arrange
     mock_sp = MagicMock()
-    mock_get_spotify_access_token.return_value = mock_sp
+    mock_get_spotify_client.return_value = mock_sp
     playlist_id = 'playlist_id'
 
     # Mock the Spotify client - both tracks within window
@@ -155,7 +155,7 @@ def test_get_playlist_with_mocked_results(mock_get_spotify_access_token):
     result = get_playlist(playlist_id)
 
     # Assert
-    mock_get_spotify_access_token.assert_called_once()
+    mock_get_spotify_client.assert_called_once()
     mock_sp.playlist.assert_called_once_with(playlist_id)
     assert result == [
         {'name': 'Song 1', 'url': 'url1', 'track_id': 'id1'},
@@ -164,8 +164,8 @@ def test_get_playlist_with_mocked_results(mock_get_spotify_access_token):
 
 
 @freeze_time("2022-01-07")  # Friday
-@patch('utils.spotify_util.get_spotify_access_token')
-def test_get_playlist_filters_by_rolling_window(mock_get_spotify_access_token):
+@patch('utils.spotify_util.get_spotify_client')
+def test_get_playlist_filters_by_rolling_window(mock_get_spotify_client):
     """
     Test that get_playlist only returns tracks within the 6-day rolling window.
     
@@ -174,7 +174,7 @@ def test_get_playlist_filters_by_rolling_window(mock_get_spotify_access_token):
     """
     # Arrange
     mock_sp = MagicMock()
-    mock_get_spotify_access_token.return_value = mock_sp
+    mock_get_spotify_client.return_value = mock_sp
     playlist_id = 'playlist_id'
 
     # Mock the Spotify client with tracks from different dates
@@ -202,7 +202,7 @@ def test_get_playlist_filters_by_rolling_window(mock_get_spotify_access_token):
     result = get_playlist(playlist_id)
 
     # Assert - only first 2 tracks within 6-day window should be returned
-    mock_get_spotify_access_token.assert_called_once()
+    mock_get_spotify_client.assert_called_once()
     mock_sp.playlist.assert_called_once_with(playlist_id)
     assert len(result) == 2
     track_ids = [t['track_id'] for t in result]
@@ -302,11 +302,11 @@ class TestPlaylistNaming:
 class TestGetLatestTrackYear:
     """Tests for get_latest_track_year function."""
 
-    @patch('utils.spotify_util.get_spotify_access_token')
-    def test_returns_year_from_latest_track(self, mock_get_spotify_access_token):
+    @patch('utils.spotify_util.get_spotify_client')
+    def test_returns_year_from_latest_track(self, mock_get_spotify_client):
         """Test extracting year from the most recently added track."""
         mock_sp = MagicMock()
-        mock_get_spotify_access_token.return_value = mock_sp
+        mock_get_spotify_client.return_value = mock_sp
 
         # First call: get total count
         mock_sp.playlist.return_value = {'tracks': {'total': 100}}
@@ -329,11 +329,11 @@ class TestGetLatestTrackYear:
             offset=97  # 100 - 3
         )
 
-    @patch('utils.spotify_util.get_spotify_access_token')
-    def test_returns_none_for_empty_playlist(self, mock_get_spotify_access_token):
+    @patch('utils.spotify_util.get_spotify_client')
+    def test_returns_none_for_empty_playlist(self, mock_get_spotify_client):
         """Test returns None for playlist with no tracks."""
         mock_sp = MagicMock()
-        mock_get_spotify_access_token.return_value = mock_sp
+        mock_get_spotify_client.return_value = mock_sp
 
         mock_sp.playlist.return_value = {'tracks': {'total': 0}}
 
@@ -341,11 +341,11 @@ class TestGetLatestTrackYear:
         assert result is None
         mock_sp.playlist_tracks.assert_not_called()
 
-    @patch('utils.spotify_util.get_spotify_access_token')
-    def test_handles_single_track(self, mock_get_spotify_access_token):
+    @patch('utils.spotify_util.get_spotify_client')
+    def test_handles_single_track(self, mock_get_spotify_client):
         """Test with a single track in the playlist."""
         mock_sp = MagicMock()
-        mock_get_spotify_access_token.return_value = mock_sp
+        mock_get_spotify_client.return_value = mock_sp
 
         mock_sp.playlist.return_value = {'tracks': {'total': 1}}
         mock_sp.playlist_tracks.return_value = {
@@ -361,11 +361,11 @@ class TestGetLatestTrackYear:
             offset=0  # max(0, 1-3) = 0
         )
 
-    @patch('utils.spotify_util.get_spotify_access_token')
-    def test_handles_large_playlist_efficiently(self, mock_get_spotify_access_token):
+    @patch('utils.spotify_util.get_spotify_client')
+    def test_handles_large_playlist_efficiently(self, mock_get_spotify_client):
         """Test that a 1200-track playlist only fetches the last 3 tracks."""
         mock_sp = MagicMock()
-        mock_get_spotify_access_token.return_value = mock_sp
+        mock_get_spotify_client.return_value = mock_sp
 
         mock_sp.playlist.return_value = {'tracks': {'total': 1200}}
         mock_sp.playlist_tracks.return_value = {
@@ -387,11 +387,11 @@ class TestGetLatestTrackYear:
 
 
 @freeze_time("2025-12-07")
-@patch('utils.spotify_util.get_spotify_access_token')
-def test_find_playlist_by_year_found(mock_get_spotify_access_token):
+@patch('utils.spotify_util.get_spotify_client')
+def test_find_playlist_by_year_found(mock_get_spotify_client):
     """Test finding an existing playlist by year."""
     mock_sp = MagicMock()
-    mock_get_spotify_access_token.return_value = mock_sp
+    mock_get_spotify_client.return_value = mock_sp
 
     mock_sp.current_user_playlists.return_value = {
         'items': [
@@ -427,11 +427,11 @@ def test_find_playlist_by_year_found(mock_get_spotify_access_token):
 
 
 @freeze_time("2025-12-07")
-@patch('utils.spotify_util.get_spotify_access_token')
-def test_find_playlist_by_year_found_without_validation(mock_get_spotify_access_token):
+@patch('utils.spotify_util.get_spotify_client')
+def test_find_playlist_by_year_found_without_validation(mock_get_spotify_client):
     """Test finding an existing playlist by year without track validation."""
     mock_sp = MagicMock()
-    mock_get_spotify_access_token.return_value = mock_sp
+    mock_get_spotify_client.return_value = mock_sp
 
     mock_sp.current_user_playlists.return_value = {
         'items': [
@@ -455,11 +455,11 @@ def test_find_playlist_by_year_found_without_validation(mock_get_spotify_access_
 
 
 @freeze_time("2025-12-07")
-@patch('utils.spotify_util.get_spotify_access_token')
-def test_find_playlist_by_year_not_found(mock_get_spotify_access_token):
+@patch('utils.spotify_util.get_spotify_client')
+def test_find_playlist_by_year_not_found(mock_get_spotify_client):
     """Test finding a playlist when it doesn't exist."""
     mock_sp = MagicMock()
-    mock_get_spotify_access_token.return_value = mock_sp
+    mock_get_spotify_client.return_value = mock_sp
 
     mock_sp.current_user_playlists.return_value = {
         'items': [
@@ -479,11 +479,11 @@ def test_find_playlist_by_year_not_found(mock_get_spotify_access_token):
 
 
 @freeze_time("2025-12-07")
-@patch('utils.spotify_util.get_spotify_access_token')
-def test_find_playlist_by_year_pagination(mock_get_spotify_access_token):
+@patch('utils.spotify_util.get_spotify_client')
+def test_find_playlist_by_year_pagination(mock_get_spotify_client):
     """Test finding a playlist across multiple pages."""
     mock_sp = MagicMock()
-    mock_get_spotify_access_token.return_value = mock_sp
+    mock_get_spotify_client.return_value = mock_sp
 
     # First page doesn't have the playlist
     mock_sp.current_user_playlists.side_effect = [
@@ -515,11 +515,11 @@ def test_find_playlist_by_year_pagination(mock_get_spotify_access_token):
 
 
 @freeze_time("2025-12-07")
-@patch('utils.spotify_util.get_spotify_access_token')
-def test_create_yearly_playlist(mock_get_spotify_access_token):
+@patch('utils.spotify_util.get_spotify_client')
+def test_create_yearly_playlist(mock_get_spotify_client):
     """Test creating a new yearly playlist."""
     mock_sp = MagicMock()
-    mock_get_spotify_access_token.return_value = mock_sp
+    mock_get_spotify_client.return_value = mock_sp
 
     mock_sp.current_user.return_value = {'id': 'user123'}
     mock_sp.user_playlist_create.return_value = {
@@ -544,11 +544,11 @@ def test_create_yearly_playlist(mock_get_spotify_access_token):
 
 
 @freeze_time("2025-12-07")
-@patch('utils.spotify_util.get_spotify_access_token')
-def test_get_or_create_yearly_playlist_existing(mock_get_spotify_access_token):
+@patch('utils.spotify_util.get_spotify_client')
+def test_get_or_create_yearly_playlist_existing(mock_get_spotify_client):
     """Test get_or_create when playlist exists."""
     mock_sp = MagicMock()
-    mock_get_spotify_access_token.return_value = mock_sp
+    mock_get_spotify_client.return_value = mock_sp
 
     mock_sp.current_user_playlists.return_value = {
         'items': [
@@ -577,11 +577,11 @@ def test_get_or_create_yearly_playlist_existing(mock_get_spotify_access_token):
 
 
 @freeze_time("2025-12-07")
-@patch('utils.spotify_util.get_spotify_access_token')
-def test_get_or_create_yearly_playlist_new(mock_get_spotify_access_token):
+@patch('utils.spotify_util.get_spotify_client')
+def test_get_or_create_yearly_playlist_new(mock_get_spotify_client):
     """Test get_or_create when playlist doesn't exist."""
     mock_sp = MagicMock()
-    mock_get_spotify_access_token.return_value = mock_sp
+    mock_get_spotify_client.return_value = mock_sp
 
     # No matching playlist found
     mock_sp.current_user_playlists.return_value = {

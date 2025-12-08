@@ -1,4 +1,4 @@
-from utils.spotify_access_token import get_spotify_access_token
+from utils.spotify_access_token import get_spotify_client
 from utils.texts import (
     PLAYLIST_NAME_PREFIX_PATTERN,
     PLAYLIST_YEAR_PATTERN,
@@ -34,7 +34,7 @@ def get_latest_track_year(playlist_id: str) -> Optional[int]:
     Returns:
         The year of the most recently added track, or None if playlist is empty
     """
-    sp = get_spotify_access_token()
+    sp = get_spotify_client()
 
     try:
         # First, get the total track count
@@ -175,7 +175,7 @@ def find_playlist_by_year(year: Optional[int] = None, validate_with_tracks: bool
     if year is None:
         year = get_current_year()
 
-    sp = get_spotify_access_token()
+    sp = get_spotify_client()
 
     # Collect candidate playlists that match by name
     candidates = []
@@ -258,7 +258,7 @@ def create_yearly_playlist(year: Optional[int] = None) -> dict:
     if year is None:
         year = get_current_year()
 
-    sp = get_spotify_access_token()
+    sp = get_spotify_client()
     user_id = sp.current_user()['id']
 
     name = generate_playlist_name(year)
@@ -351,7 +351,7 @@ def get_playlist(playlist_id='1OdSuwMRWtpP0nVhLffEqe', days_back: int = 6):
     Returns:
         List of track dicts with name, url, and track_id
     """
-    sp = get_spotify_access_token()
+    sp = get_spotify_client()
 
     playlist = sp.playlist(playlist_id)
     print(playlist['name'])
@@ -385,7 +385,7 @@ def get_playlist(playlist_id='1OdSuwMRWtpP0nVhLffEqe', days_back: int = 6):
 
 # Add tracks to playlist using track id
 def add_songs_to_spotify_playlist(playlist_id='1OdSuwMRWtpP0nVhLffEqe', track_ids=[]):
-    sp = get_spotify_access_token()
+    sp = get_spotify_client()
 
     # print('######### Adding tracks to playlist: ###########')
     # print(sp.me())
@@ -412,7 +412,7 @@ def get_playlist_stats(playlist_id: str) -> dict:
     Returns:
         Dict with track_count, top_artists, and top_genres
     """
-    sp = get_spotify_access_token()
+    sp = get_spotify_client()
 
     # Get all tracks from the playlist
     all_tracks = []
