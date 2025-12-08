@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 from utils.spotify_access_token import get_spotify_access_token
 from utils.texts import (
     PLAYLIST_NAME_PREFIX_PATTERN,
