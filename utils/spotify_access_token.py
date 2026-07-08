@@ -1,12 +1,12 @@
 # Prepare spotify access
 # export function to be used in main.py
 #
-import spotipy
-from spotipy.oauth2 import SpotifyOAuth
-from dotenv import load_dotenv
-import os
-import requests
 import threading
+
+import requests
+import spotipy
+from dotenv import load_dotenv
+from spotipy.oauth2 import SpotifyOAuth
 
 # Load environment variables from .env file (if exists)
 # Spotipy reads SPOTIPY_CLIENT_ID, SPOTIPY_CLIENT_SECRET, SPOTIPY_REDIRECT_URI automatically
@@ -18,15 +18,9 @@ _token_validated: bool = False
 _lock = threading.Lock()
 
 
-def check_spotify_token(spotify_token):
-    spotify_token = spotify_token or os.getenv("SPOTIFY_API_TOKEN")
-
-    # print('Spotify token: ', spotify_token)
-    # print('Spotify token access_token: ', spotify_token.get('access_token'))
-
-    headers = {
-        'Authorization': 'Bearer {}'.format(spotify_token.get('access_token'))
-    }
+def check_spotify_token(access_token: str) -> None:
+    """Validate a Spotify access token against the /me endpoint and log the result."""
+    headers = {"Authorization": f"Bearer {access_token}"}
 
     response = requests.get("https://api.spotify.com/v1/me", headers=headers)
 
@@ -39,11 +33,11 @@ def check_spotify_token(spotify_token):
 def get_spotify_client() -> spotipy.Spotify:
     """
     Get or create a cached Spotify client instance (thread-safe singleton).
-    
+
     This function creates the Spotify client once and reuses it for all
     subsequent calls. Uses a lock to ensure thread safety.
     Token is validated only on first call to avoid duplicate log messages.
-    
+
     Returns:
         A configured Spotipy client instance
     """
@@ -59,13 +53,13 @@ def get_spotify_client() -> spotipy.Spotify:
         if _spotify_client is not None:
             return _spotify_client
 
-        scope = 'playlist-read-collaborative playlist-modify-public playlist-modify-private'
+        scope = "playlist-read-collaborative playlist-modify-public playlist-modify-private"
         client = spotipy.Spotify(auth_manager=SpotifyOAuth(scope=scope))
 
         # Validate token only once
-        if not _token_validated:
-            spotify_token = client.auth_manager.get_access_token()
-            check_spotify_token(spotify_token)
+        if not _token_validated and client.auth_manager is not None:
+            access_token = client.auth_manager.get_access_token(as_dict=False)
+            check_spotify_token(access_token)
             _token_validated = True
 
         _spotify_client = client
