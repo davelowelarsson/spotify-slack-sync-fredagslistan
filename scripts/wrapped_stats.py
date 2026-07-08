@@ -19,6 +19,9 @@ import json
 import os
 import sys
 
+# Make the repo root importable when run directly (python scripts/wrapped_stats.py).
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
 from utils.slack_util import get_year_contributors
 from utils.spotify_util import (
     SearchOutcome,
