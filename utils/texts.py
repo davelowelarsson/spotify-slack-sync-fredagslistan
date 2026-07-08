@@ -34,8 +34,10 @@ PLAYLIST_NAME_TEMPLATES = [
 # leading non-word characters (emoji, spaces, punctuation). The `\W*` prefix
 # is deliberately NOT `.*`: a word character before "Fredagslistan" (e.g. "My
 # Fredagslistan clone" or "2026 Fredagslistan") must NOT match, so unrelated
-# playlists that merely mention the word stay invisible to the resolver.
-PLAYLIST_NAME_PREFIX_PATTERN = r"^\W*Fredagslistan\s*!?\s*"
+# playlists that merely mention the word stay invisible to the resolver. The
+# trailing `\b` (word boundary) prevents matching longer words like
+# "Fredagslistanish 2026" that merely start with the prefix.
+PLAYLIST_NAME_PREFIX_PATTERN = r"^\W*Fredagslistan\b"
 # Second pattern: Find all 4-digit years or 2-digit year suffixes (e.g., "2024-25" -> 2024, 25)
 PLAYLIST_YEAR_PATTERN = r"(\d{4})(?:-(\d{2}))?"
 

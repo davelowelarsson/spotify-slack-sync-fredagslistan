@@ -277,15 +277,20 @@ def find_playlist_by_year(
     candidates: list[dict] = []
     offset = 0
     limit = 50
+    # Bound the walk so a pathological, never-terminating `next` cannot loop
+    # forever; exceeding it means we could not prove completeness -> UNCERTAIN.
+    max_pages = 200
 
-    while True:
+    for _ in range(max_pages):
         results = _fetch_playlists_page(sp, limit, offset)
         if results is None:
             # A page ultimately failed: we cannot prove absence.
             return SearchResult(outcome=SearchOutcome.UNCERTAIN)
+        if "items" not in results:
+            # Malformed page (no items key): cannot prove the walk is complete.
+            return SearchResult(outcome=SearchOutcome.UNCERTAIN)
 
-        playlists = results.get("items", [])
-        for playlist in playlists:
+        for playlist in results["items"]:
             if extract_year_from_playlist_name(playlist["name"]) == year:
                 candidates.append(
                     {
@@ -297,10 +302,15 @@ def find_playlist_by_year(
                     }
                 )
 
-        if not playlists or results.get("next") is None:
+        # Terminate ONLY when Spotify reports no next page. An empty INTERIOR
+        # page (items=[] with a non-null next) must NOT end the walk, or a later
+        # page could be missed and absence wrongly concluded.
+        if results.get("next") is None:
             break
-
         offset += limit
+    else:
+        # Ran past the page cap without a terminating page: cannot prove absence.
+        return SearchResult(outcome=SearchOutcome.UNCERTAIN)
 
     # Enumeration completed successfully here.
     if not candidates:
@@ -366,14 +376,26 @@ def _verify_cached_playlist(playlist_id: str, year: int) -> dict | None:
         return None
 
     name = playlist.get("name", "")
-    if extract_year_from_playlist_name(name) != year:
-        print(f"⚠️ Cached playlist name '{name}' no longer matches {year}")
+    # Reject only if the name encodes a DIFFERENT year. A name that encodes no
+    # year at all (e.g. someone renamed it and dropped the year) is still
+    # trusted: we cached this id as the current year's playlist, so matching by
+    # id avoids a spurious duplicate create on a harmless rename.
+    name_year = extract_year_from_playlist_name(name)
+    if name_year is not None and name_year != year:
+        print(f"⚠️ Cached playlist name '{name}' now encodes {name_year}, not {year}")
+        return None
+
+    # Guard against a malformed response missing the fields we depend on.
+    resolved_id = playlist.get("id")
+    url = (playlist.get("external_urls") or {}).get("spotify")
+    if not resolved_id or not url:
+        print(f"⚠️ Cached playlist {playlist_id} missing id/url — treating as unverifiable")
         return None
 
     return {
-        "id": playlist["id"],
+        "id": resolved_id,
         "name": name,
-        "url": playlist["external_urls"]["spotify"],
+        "url": url,
         "description": playlist.get("description", ""),
         "track_count": playlist.get("tracks", {}).get("total"),
     }
