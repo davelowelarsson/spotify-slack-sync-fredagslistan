@@ -1,15 +1,15 @@
 # start by getting spotify access-token
 # import the file and runt the function
 
+from datetime import datetime
+
+from utils.slack_util import announce_new_playlist, get_recent_slack_tracks, get_year_contributors
 from utils.spotify_util import (
-    get_playlist,
     add_songs_to_spotify_playlist,
     get_or_create_yearly_playlist,
+    get_playlist,
     get_previous_year_stats,
 )
-from utils.slack_util import get_recent_slack_tracks, announce_new_playlist, get_year_contributors
-
-from datetime import datetime
 
 # Channel IDs
 FREDAGSLISTAN_CHANNEL_ID = "CAB3JFSQN"  # Production channel
@@ -29,8 +29,7 @@ def compare_lists_and_remove_duplicates(playlist_id: str) -> tuple[list[str], li
         Tuple of (list of track IDs to add, list of track dicts with full info)
     """
     songs_already_in_spotify = get_playlist(playlist_id=playlist_id)
-    songs_added_in_slack = get_recent_slack_tracks(
-        channel_id=ACTIVE_CHANNEL_ID)
+    songs_added_in_slack = get_recent_slack_tracks(channel_id=ACTIVE_CHANNEL_ID)
 
     # compare the two lists and create a new list without duplicates
     # if the song is in the spotify list it's not allowed to be added to the new list
@@ -44,26 +43,24 @@ def compare_lists_and_remove_duplicates(playlist_id: str) -> tuple[list[str], li
     # the spotify list is a list of dicts with name, url, and track_id
 
     # count the length of both lists
-    print('Tracks from Slack (last 6 days): ', len(songs_added_in_slack))
-    print('Tracks already in Spotify playlist: ', len(songs_already_in_spotify))
+    print("Tracks from Slack (last 6 days): ", len(songs_added_in_slack))
+    print("Tracks already in Spotify playlist: ", len(songs_already_in_spotify))
 
     # Sort slack tracks by timestamp
-    songs_added_in_slack_sorted = sorted(
-        songs_added_in_slack, key=lambda x: x['timestamp'])
+    songs_added_in_slack_sorted = sorted(songs_added_in_slack, key=lambda x: x["timestamp"])
 
     # loop through the slack list
     for song in songs_added_in_slack_sorted:
         # check if the song is in the spotify list
         # if it's not in the list, add it to the new list
-        if not any(song['track_id'] == s['track_id'] for s in songs_already_in_spotify):
-            songs_to_add.append(song['track_id'])
+        if not any(song["track_id"] == s["track_id"] for s in songs_already_in_spotify):
+            songs_to_add.append(song["track_id"])
             songs_to_add_full.append(song)
 
     # print the new list with user attribution
-    print(f'\n📀 Songs to add: {len(songs_to_add)}')
+    print(f"\n📀 Songs to add: {len(songs_to_add)}")
     for song in songs_to_add_full:
-        print(
-            f"  🎵 {song['track_id']} (shared by {song.get('user_name', 'Unknown')})")
+        print(f"  🎵 {song['track_id']} (shared by {song.get('user_name', 'Unknown')})")
 
     return songs_to_add, songs_to_add_full
 
@@ -75,7 +72,7 @@ def main() -> None:
 
     # Get or create the playlist for the current year
     playlist, was_created = get_or_create_yearly_playlist()
-    playlist_id = playlist['id']
+    playlist_id = playlist["id"]
 
     print(f"Using playlist: {playlist['name']} ({playlist_id})")
 
@@ -91,27 +88,23 @@ def main() -> None:
             print(f"📊 Previous year ({previous_year_stats['year']}):")
             print(f"   - Tracks: {previous_year_stats['track_count']}")
             print(f"   - Top genres: {previous_year_stats['top_genres'][:5]}")
-            print(
-                f"   - Top artists: {previous_year_stats['top_artists'][:5]}")
+            print(f"   - Top artists: {previous_year_stats['top_artists'][:5]}")
 
             # Fetch top contributors from Slack for the previous year
             print("Fetching top contributors from Slack...")
             top_contributors = get_year_contributors(
-                channel_id=ACTIVE_CHANNEL_ID,
-                year=previous_year_stats['year'],
-                limit=5
+                channel_id=ACTIVE_CHANNEL_ID, year=previous_year_stats["year"], limit=5
             )
             if top_contributors:
-                previous_year_stats['top_contributors'] = top_contributors
-                print(
-                    f"   - Top contributors: {[c['user_name'] for c in top_contributors]}")
+                previous_year_stats["top_contributors"] = top_contributors
+                print(f"   - Top contributors: {[c['user_name'] for c in top_contributors]}")
         else:
             print("No previous year playlist found for stats")
 
         message_posted, topic_updated = announce_new_playlist(
             channel_id=ACTIVE_CHANNEL_ID,
             playlist=playlist,
-            previous_year_stats=previous_year_stats
+            previous_year_stats=previous_year_stats,
         )
         if message_posted:
             print("✅ Announcement posted successfully")
@@ -124,15 +117,12 @@ def main() -> None:
             print("❌ Failed to update channel topic")
 
     # Get the songs to add to the spotify list
-    songs_to_add, songs_to_add_full = compare_lists_and_remove_duplicates(
-        playlist_id=playlist_id)
+    songs_to_add, _songs_to_add_full = compare_lists_and_remove_duplicates(playlist_id=playlist_id)
 
     # Add the songs to the spotify list
-    add_songs_to_spotify_playlist(
-        playlist_id=playlist_id, track_ids=songs_to_add)
+    add_songs_to_spotify_playlist(playlist_id=playlist_id, track_ids=songs_to_add)
 
-    print(
-        f"\n✅ Sync complete. Added {len(songs_to_add)} tracks to {playlist['name']}")
+    print(f"\n✅ Sync complete. Added {len(songs_to_add)} tracks to {playlist['name']}")
 
 
 if __name__ == "__main__":
