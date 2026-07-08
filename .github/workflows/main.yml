@@ -6,9 +6,13 @@ on:
   schedule:
     # Run every Friday between 08:00 and 18:00
     - cron:  '*/15 7-19 * * 5'
+  workflow_dispatch:
+
+permissions:
+  contents: read
 
 jobs:
-  build:
+  sync:
     env:
       SLACK_API_TOKEN: ${{ secrets.SLACK_API_TOKEN }}
       SPOTIPY_CLIENT_ID: ${{ secrets.SPOTIPY_CLIENT_ID }}
@@ -17,17 +21,19 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-    - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
 
-    - name: Set up Python
-      uses: actions/setup-python@v6
-      with:
-        python-version: '3.13'
-        cache: 'pip' # caching pip dependencies
-    - run: pip install -r requirements.txt
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
 
-    - name: Run tests
-      run: pytest
+      - name: Install dependencies
+        run: uv sync --dev
 
-    - name: Run main.py
-      run: python main.py
+      - name: Run tests
+        run: uv run pytest -q
+
+      # NOTE: `push` currently runs a real sync. Phase 2 (#17) wires push -> DRY_RUN
+      # so pushes self-test without writing to Spotify/Slack; scheduled and manual
+      # (workflow_dispatch) runs stay real.
+      - name: Run main.py
+        run: uv run python main.py
