@@ -1,6 +1,7 @@
 # start by getting spotify access-token
 # import the file and runt the function
 
+import os
 from datetime import datetime
 
 from utils.playlist_state import is_dry_run, read_state_from_env, write_github_output
@@ -12,12 +13,10 @@ from utils.spotify_util import (
     resolve_yearly_playlist,
 )
 
-# Channel IDs
-FREDAGSLISTAN_CHANNEL_ID = "CAB3JFSQN"  # Production channel
-TEST_CHANNEL_ID = "C0A2V5D0VG8"  # Test channel
-
-# Active channel for sync operations
-ACTIVE_CHANNEL_ID = FREDAGSLISTAN_CHANNEL_ID
+# Slack channel to sync, configurable via env. Defaults to the #fredagslistan
+# production channel; set SLACK_CHANNEL_ID to point elsewhere (e.g. a test
+# channel) without changing code.
+ACTIVE_CHANNEL_ID = os.getenv("SLACK_CHANNEL_ID", "CAB3JFSQN")
 
 
 def compare_lists_and_remove_duplicates(playlist_id: str) -> tuple[list[str], list[dict]]:
