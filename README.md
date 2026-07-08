@@ -116,7 +116,7 @@ uv run pytest tests/test_slack_util.py  # Specific test file
 - [x] Support thread message extraction
 - [x] 6-day rolling window for captures
 - [x] Type hints throughout codebase
-- [x] Comprehensive test coverage (109 tests)
+- [x] Comprehensive test coverage
 - [x] Create new playlist automatically for each year
 - [x] Announce playlist in Slack (with Block Kit)
 - [x] Update channel topic with playlist link
