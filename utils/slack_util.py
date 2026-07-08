@@ -32,6 +32,16 @@ from utils.texts import (
 load_dotenv()
 
 
+def anonymize_name(name: str) -> str:
+    """Mask a display name for stdout/CI logs, keeping only the first character.
+
+    Full names are still shown in the Slack messages posted to the channel; this
+    only prevents contributor names leaking into (public) GitHub Actions logs.
+    """
+    name = (name or "").strip()
+    return f"{name[0]}***" if name else "***"
+
+
 def get_slack_client() -> tuple[str | None, WebClient]:
     """Get Slack client and token from environment."""
     # Get the Slack token from the environment variable

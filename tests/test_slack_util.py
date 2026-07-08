@@ -6,6 +6,7 @@ from freezegun import freeze_time
 from utils.slack_util import (
     _user_cache,
     announce_new_playlist,
+    anonymize_name,
     check_slack_token,
     extract_spotify_track_ids,
     get_random_topic_message,
@@ -17,6 +18,13 @@ from utils.slack_util import (
     update_channel_topic,
 )
 from utils.texts import SLACK_TOPIC_TEMPLATES
+
+
+def test_anonymize_name_keeps_only_first_char():
+    assert anonymize_name("Alice") == "A***"
+    assert anonymize_name("  Bob ") == "B***"
+    assert anonymize_name("") == "***"
+    assert anonymize_name(None) == "***"
 
 
 # Unit tests for is_message_within_window (rolling window)
