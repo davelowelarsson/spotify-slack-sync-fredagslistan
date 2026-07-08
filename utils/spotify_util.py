@@ -564,7 +564,6 @@ def add_songs_to_spotify_playlist(
         track_ids = [track_ids]
 
     if track_ids:
-        # print('Adding tracks: ', track_ids)
         sp.playlist_add_items(playlist_id, track_ids)
     else:
         print("No tracks to add to playlist.")
