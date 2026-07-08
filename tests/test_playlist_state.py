@@ -1,11 +1,14 @@
 """Tests for the pure playlist_state module (no spotipy / no network)."""
 
+import pytest
+
 from utils.playlist_state import (
     DEFAULT_FAILURE_THRESHOLD,
     PlaylistAction,
     PlaylistState,
     ResolutionResult,
     abort_result,
+    is_dry_run,
     read_state_from_env,
     success_result,
     write_github_output,
@@ -59,6 +62,29 @@ class TestReadStateFromEnv:
         )
         assert state.playlist_id == "pid"
         assert state.playlist_year == 2025
+
+
+class TestIsDryRun:
+    """is_dry_run: True for a small set of truthy strings, case/whitespace-insensitive."""
+
+    @pytest.mark.parametrize(
+        "raw", ["1", "true", "TRUE", "True", "yes", "YES", "on", "ON", " 1 ", " true "]
+    )
+    def test_truthy_values(self, raw):
+        assert is_dry_run({"DRY_RUN": raw}) is True
+
+    @pytest.mark.parametrize("raw", ["0", "", "nope", "false", "no", "off"])
+    def test_falsy_values(self, raw):
+        assert is_dry_run({"DRY_RUN": raw}) is False
+
+    def test_absent_is_false(self):
+        assert is_dry_run({}) is False
+
+    def test_none_env_reads_os_environ(self, monkeypatch):
+        monkeypatch.delenv("DRY_RUN", raising=False)
+        assert is_dry_run() is False
+        monkeypatch.setenv("DRY_RUN", "1")
+        assert is_dry_run() is True
 
 
 class TestAbortResult:

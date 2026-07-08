@@ -966,6 +966,64 @@ def test_resolve_search_retries_then_succeeds(mock_get_spotify_client):
 
 @freeze_time("2026-07-03")
 @patch("utils.spotify_util.get_spotify_client")
+def test_resolve_dry_run_confirmed_absent_does_not_create(mock_get_spotify_client):
+    """dry_run=True on CONFIRMED_ABSENT must never call user_playlist_create."""
+    mock_sp = MagicMock()
+    mock_get_spotify_client.return_value = mock_sp
+    mock_sp.current_user_playlists.return_value = {
+        "items": [
+            {
+                "id": "unrelated",
+                "name": "Fredagslistan 2024 🎵",
+                "external_urls": {"spotify": "u"},
+                "description": "",
+            }
+        ],
+        "next": None,
+    }
+
+    state = PlaylistState(search_failures=1, failure_threshold=5)
+    result = resolve_yearly_playlist(state, dry_run=True)
+
+    assert result.action is PlaylistAction.WOULD_CREATE
+    assert result.playlist is None
+    assert result.was_created is False
+    assert result.exit_code == 0
+    assert result.search_failures == 1  # unchanged -- a dry-run is not a failure
+    mock_sp.user_playlist_create.assert_not_called()
+
+
+@freeze_time("2026-07-03")
+@patch("utils.spotify_util.get_spotify_client")
+def test_resolve_dry_run_does_not_affect_found(mock_get_spotify_client):
+    """dry_run=True must not alter the FOUND outcome (spot-check)."""
+    mock_sp = MagicMock()
+    mock_get_spotify_client.return_value = mock_sp
+    mock_sp.current_user_playlists.return_value = {
+        "items": [
+            {
+                "id": "search_hit",
+                "name": "Fredagslistan 2026 🎶",
+                "external_urls": {"spotify": "https://open.spotify.com/playlist/search_hit"},
+                "description": "",
+                "tracks": {"total": 8},
+            }
+        ],
+        "next": None,
+    }
+    mock_sp.playlist.return_value = {"tracks": {"total": 8}}
+    mock_sp.playlist_tracks.return_value = {"items": [{"added_at": "2026-05-01T10:00:00Z"}]}
+
+    state = PlaylistState(failure_threshold=5)
+    result = resolve_yearly_playlist(state, dry_run=True)
+
+    assert result.action is PlaylistAction.FOUND
+    assert result.playlist["id"] == "search_hit"
+    mock_sp.user_playlist_create.assert_not_called()
+
+
+@freeze_time("2026-07-03")
+@patch("utils.spotify_util.get_spotify_client")
 def test_resolve_sanity_check_warns_on_zero_tracks(mock_get_spotify_client, capsys):
     """Resolving to an EXISTING but empty playlist warns, does not recreate."""
     mock_sp = MagicMock()
