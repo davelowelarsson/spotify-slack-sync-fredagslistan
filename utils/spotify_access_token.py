@@ -1,11 +1,13 @@
 # Prepare spotify access
 # export function to be used in main.py
 #
+import os
 import threading
 
 import requests
 import spotipy
 from dotenv import load_dotenv
+from spotipy.cache_handler import MemoryCacheHandler
 from spotipy.oauth2 import SpotifyOAuth
 
 # Load environment variables from .env file (if exists)
@@ -16,6 +18,42 @@ load_dotenv()
 _spotify_client: spotipy.Spotify | None = None
 _token_validated: bool = False
 _lock = threading.Lock()
+
+
+def _build_auth_manager(scope: str) -> SpotifyOAuth:
+    """Build the Spotify OAuth manager.
+
+    In CI / headless runs, authenticate from a ``SPOTIPY_REFRESH_TOKEN`` secret
+    held only in memory — nothing is read from or written to a committed token
+    file. The token is seeded as already-expired so spotipy refreshes it on
+    first use. Locally (no refresh token in the environment) we fall back to
+    spotipy's default file-based cache (``.cache``) / interactive browser flow.
+    """
+    refresh_token = os.getenv("SPOTIPY_REFRESH_TOKEN")
+    if refresh_token:
+        cache_handler = MemoryCacheHandler(
+            token_info={
+                "refresh_token": refresh_token,
+                "access_token": "",
+                "expires_at": 0,  # already expired -> forces a refresh
+                "scope": scope,
+                "token_type": "Bearer",
+            }
+        )
+        return SpotifyOAuth(scope=scope, cache_handler=cache_handler, open_browser=False)
+
+    # No refresh token in the environment. In CI there is no interactive OAuth,
+    # so if there is also no cached token file to fall back on, fail fast with a
+    # clear message instead of blocking on spotipy's stdin prompt (which would
+    # EOFError / hang the runner).
+    if os.getenv("CI") and not os.path.exists(".cache"):
+        raise RuntimeError(
+            "No Spotify credentials available in CI: set the SPOTIPY_REFRESH_TOKEN "
+            "secret (see the README 'Spotify auth & token rotation' section)."
+        )
+
+    # Local development: spotipy's default .cache file / interactive OAuth.
+    return SpotifyOAuth(scope=scope)
 
 
 def check_spotify_token(access_token: str) -> None:
@@ -54,7 +92,7 @@ def get_spotify_client() -> spotipy.Spotify:
             return _spotify_client
 
         scope = "playlist-read-collaborative playlist-modify-public playlist-modify-private"
-        client = spotipy.Spotify(auth_manager=SpotifyOAuth(scope=scope))
+        client = spotipy.Spotify(auth_manager=_build_auth_manager(scope))
 
         # Validate token only once
         if not _token_validated and client.auth_manager is not None:
