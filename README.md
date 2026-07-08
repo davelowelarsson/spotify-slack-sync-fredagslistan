@@ -61,7 +61,7 @@ Automatically syncs Spotify tracks shared in a Slack channel to a collaborative 
 
    > Using [mise](https://mise.jdx.dev/)? `mise install` provisions both Python and uv.
 
-4. Configure environment variables
+3. Configure environment variables
 
    ```sh
    cp .env.example .env
@@ -77,7 +77,7 @@ Automatically syncs Spotify tracks shared in a Slack channel to a collaborative 
    SPOTIPY_REDIRECT_URI=...
    ```
 
-5. Run the sync
+4. Run the sync
 
    ```sh
    uv run python main.py
