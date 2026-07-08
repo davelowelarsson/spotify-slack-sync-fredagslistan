@@ -1,8 +1,11 @@
 from unittest.mock import MagicMock, patch
 
 from freezegun import freeze_time
+from spotipy import SpotifyException
 
+from utils.playlist_state import PlaylistAction, PlaylistState
 from utils.spotify_util import (
+    SearchOutcome,
     add_songs_to_spotify_playlist,
     create_yearly_playlist,
     extract_year_from_playlist_name,
@@ -11,9 +14,9 @@ from utils.spotify_util import (
     generate_playlist_name,
     get_current_year,
     get_latest_track_year,
-    get_or_create_yearly_playlist,
     get_playlist,
     is_track_within_window,
+    resolve_yearly_playlist,
 )
 
 
@@ -455,11 +458,12 @@ def test_find_playlist_by_year_found(mock_get_spotify_client):
 
     result = find_playlist_by_year(2025)
 
-    assert result is not None
-    assert result["id"] == "playlist123"
-    assert "Fredagslistan" in result["name"]
-    assert "2025" in result["name"]
-    assert "playlist123" in result["url"]
+    assert result.outcome is SearchOutcome.FOUND
+    assert result.candidate is not None
+    assert result.candidate["id"] == "playlist123"
+    assert "Fredagslistan" in result.candidate["name"]
+    assert "2025" in result.candidate["name"]
+    assert "playlist123" in result.candidate["url"]
 
 
 @freeze_time("2025-12-07")
@@ -484,8 +488,9 @@ def test_find_playlist_by_year_found_without_validation(mock_get_spotify_client)
     # Don't need to mock playlist call when validation is disabled
     result = find_playlist_by_year(2025, validate_with_tracks=False)
 
-    assert result is not None
-    assert result["id"] == "playlist123"
+    assert result.outcome is SearchOutcome.FOUND
+    assert result.candidate is not None
+    assert result.candidate["id"] == "playlist123"
     # playlist() should not have been called
     mock_sp.playlist.assert_not_called()
 
@@ -511,7 +516,8 @@ def test_find_playlist_by_year_not_found(mock_get_spotify_client):
 
     result = find_playlist_by_year(2025)
 
-    assert result is None
+    assert result.outcome is SearchOutcome.CONFIRMED_ABSENT
+    assert result.candidate is None
 
 
 @freeze_time("2025-12-07")
@@ -553,8 +559,9 @@ def test_find_playlist_by_year_pagination(mock_get_spotify_client):
 
     result = find_playlist_by_year(2025)
 
-    assert result is not None
-    assert result["id"] == "target"
+    assert result.outcome is SearchOutcome.FOUND
+    assert result.candidate is not None
+    assert result.candidate["id"] == "target"
     # Should have been called twice for pagination
     assert mock_sp.current_user_playlists.call_count == 2
 
@@ -590,54 +597,426 @@ def test_create_yearly_playlist(mock_get_spotify_client):
 
 @freeze_time("2025-12-07")
 @patch("utils.spotify_util.get_spotify_client")
-def test_get_or_create_yearly_playlist_existing(mock_get_spotify_client):
-    """Test get_or_create when playlist exists."""
+def test_find_playlist_by_year_uncertain_on_persistent_error(mock_get_spotify_client):
+    """Enumeration that never succeeds must be UNCERTAIN, never CONFIRMED_ABSENT."""
     mock_sp = MagicMock()
     mock_get_spotify_client.return_value = mock_sp
+    mock_sp.current_user_playlists.side_effect = SpotifyException(500, -1, "boom")
 
+    with patch("utils.spotify_util.time.sleep"):
+        result = find_playlist_by_year(2025)
+
+    assert result.outcome is SearchOutcome.UNCERTAIN
+    assert result.candidate is None
+
+
+@freeze_time("2026-07-03")
+@patch("utils.spotify_util.get_spotify_client")
+def test_find_playlist_by_year_empty_interior_page_does_not_end_walk(mock_get_spotify_client):
+    """An empty INTERIOR page (items=[] with a non-null next) must not stop the
+    walk; a match on a later page is still FOUND, never a false CONFIRMED_ABSENT
+    that would trigger a duplicate create."""
+    mock_sp = MagicMock()
+    mock_get_spotify_client.return_value = mock_sp
+    mock_sp.current_user_playlists.side_effect = [
+        {"items": [], "next": "page2"},  # empty interior page
+        {
+            "items": [
+                {
+                    "id": "real2026",
+                    "name": "Fredagslistan 2026 🎵",
+                    "external_urls": {"spotify": "u"},
+                    "description": "",
+                    "tracks": {"total": 3},
+                }
+            ],
+            "next": None,
+        },
+    ]
+
+    result = find_playlist_by_year(2026, validate_with_tracks=False)
+
+    assert result.outcome is SearchOutcome.FOUND
+    assert result.candidate is not None
+    assert result.candidate["id"] == "real2026"
+    mock_sp.user_playlist_create.assert_not_called()
+
+
+@freeze_time("2026-07-03")
+@patch("utils.spotify_util.get_spotify_client")
+def test_find_playlist_by_year_malformed_page_is_uncertain(mock_get_spotify_client):
+    """A page missing the `items` key can't prove completeness -> UNCERTAIN."""
+    mock_sp = MagicMock()
+    mock_get_spotify_client.return_value = mock_sp
+    mock_sp.current_user_playlists.return_value = {"next": None}  # no "items" key
+
+    result = find_playlist_by_year(2026)
+
+    assert result.outcome is SearchOutcome.UNCERTAIN
+    mock_sp.user_playlist_create.assert_not_called()
+
+
+# =============================================================================
+# resolve_yearly_playlist — the hardened resolution algorithm
+# =============================================================================
+
+
+@freeze_time("2026-07-03")
+@patch("utils.spotify_util.get_spotify_client")
+def test_resolve_uses_cached_playlist_without_enumerating(mock_get_spotify_client):
+    """state.year == current year and id verifies -> USED_CACHED, no search."""
+    mock_sp = MagicMock()
+    mock_get_spotify_client.return_value = mock_sp
+    mock_sp.playlist.return_value = {
+        "id": "cached123",
+        "name": "Fredagslistan 2026 🎵",
+        "external_urls": {"spotify": "https://open.spotify.com/playlist/cached123"},
+        "description": "d",
+        "tracks": {"total": 12},
+    }
+
+    state = PlaylistState(
+        playlist_id="cached123", playlist_year=2026, search_failures=2, failure_threshold=5
+    )
+    result = resolve_yearly_playlist(state)
+
+    assert result.action is PlaylistAction.USED_CACHED
+    assert result.playlist is not None
+    assert result.playlist["id"] == "cached123"
+    assert result.was_created is False
+    assert result.search_failures == 0  # reset on clean run
+    assert result.exit_code == 0
+    # No enumeration and no creation on the cached happy path.
+    mock_sp.current_user_playlists.assert_not_called()
+    mock_sp.user_playlist_create.assert_not_called()
+
+
+@freeze_time("2026-07-03")
+@patch("utils.spotify_util.get_spotify_client")
+def test_resolve_year_rollover_ignores_stale_cache_and_creates(mock_get_spotify_client):
+    """Year rollover: a cached id from LAST year is ignored (never verified);
+    the hardened search confirms no current-year playlist -> a new one is created.
+
+    This is the core rollover guarantee: last year's cached id must not be
+    reused, and the search must still run (not be skipped) before creating.
+    """
+    mock_sp = MagicMock()
+    mock_get_spotify_client.return_value = mock_sp
+    # Only a previous-year playlist exists -> CONFIRMED_ABSENT for 2026.
     mock_sp.current_user_playlists.return_value = {
         "items": [
             {
-                "id": "existing_id",
-                "name": "Fredagslistan 2025 🎧",
-                "external_urls": {"spotify": "https://open.spotify.com/playlist/existing_id"},
-                "description": "Fredagsmusik 2025 🔥",
+                "id": "last_year",
+                "name": "Fredagslistan 2025 🎵",
+                "external_urls": {"spotify": "u"},
+                "description": "",
+            }
+        ],
+        "next": None,
+    }
+    mock_sp.current_user.return_value = {"id": "user1"}
+    mock_sp.user_playlist_create.return_value = {
+        "id": "new2026",
+        "name": "Fredagslistan 2026 ✨",
+        "external_urls": {"spotify": "https://open.spotify.com/playlist/new2026"},
+    }
+
+    # Cached state is for LAST year -> must be ignored, not verified.
+    state = PlaylistState(playlist_id="last_year", playlist_year=2025, failure_threshold=5)
+    result = resolve_yearly_playlist(state)
+
+    assert result.action is PlaylistAction.CREATED
+    assert result.was_created is True
+    assert result.playlist["id"] == "new2026"
+    assert result.playlist_year == 2026
+    # The stale cached id was never even verified — we skipped straight to search.
+    mock_sp.playlist.assert_not_called()
+
+
+@freeze_time("2026-07-03")
+@patch("utils.spotify_util.get_spotify_client")
+def test_resolve_cache_verify_failure_falls_back_to_search(mock_get_spotify_client):
+    """If verifying the cached id raises, fall through to search and FOUND it."""
+    mock_sp = MagicMock()
+    mock_get_spotify_client.return_value = mock_sp
+    # Every sp.playlist(...) raises -> verification fails, get_latest_track_year also None.
+    mock_sp.playlist.side_effect = SpotifyException(404, -1, "not found")
+    mock_sp.current_user_playlists.return_value = {
+        "items": [
+            {
+                "id": "found1",
+                "name": "Fredagslistan 2026 🔥",
+                "external_urls": {"spotify": "https://open.spotify.com/playlist/found1"},
+                "description": "",
+                "tracks": {"total": 4},
             }
         ],
         "next": None,
     }
 
-    # Mock playlist calls for track validation (two-step: get total, then get last tracks)
-    mock_sp.playlist.return_value = {"tracks": {"total": 50}}
-    mock_sp.playlist_tracks.return_value = {"items": [{"added_at": "2025-12-01T10:00:00Z"}]}
+    state = PlaylistState(playlist_id="stale", playlist_year=2026, failure_threshold=5)
+    result = resolve_yearly_playlist(state)
 
-    result, was_created = get_or_create_yearly_playlist(2025)
-
-    assert was_created is False
-    assert result["id"] == "existing_id"
-    # user_playlist_create should NOT have been called
+    assert result.action is PlaylistAction.FOUND
+    assert result.playlist is not None
+    assert result.playlist["id"] == "found1"
+    assert result.was_created is False
     mock_sp.user_playlist_create.assert_not_called()
 
 
-@freeze_time("2025-12-07")
+@freeze_time("2026-07-03")
 @patch("utils.spotify_util.get_spotify_client")
-def test_get_or_create_yearly_playlist_new(mock_get_spotify_client):
-    """Test get_or_create when playlist doesn't exist."""
+def test_resolve_cached_trusts_id_when_name_has_no_year(mock_get_spotify_client):
+    """A cached id whose name no longer encodes a year is still trusted (matched
+    by id), so a harmless rename that drops the year does not cause a duplicate."""
     mock_sp = MagicMock()
     mock_get_spotify_client.return_value = mock_sp
-
-    # No matching playlist found
-    mock_sp.current_user_playlists.return_value = {"items": [], "next": None}
-
-    mock_sp.current_user.return_value = {"id": "user123"}
-    mock_sp.user_playlist_create.return_value = {
-        "id": "new_playlist_id",
-        "name": "Fredagslistan 2025 ✨",
-        "external_urls": {"spotify": "https://open.spotify.com/playlist/new_playlist_id"},
+    mock_sp.playlist.return_value = {
+        "id": "cached123",
+        "name": "Fredagslistan 🎵",  # year dropped by a rename
+        "external_urls": {"spotify": "https://open.spotify.com/playlist/cached123"},
+        "description": "",
+        "tracks": {"total": 20},
     }
 
-    result, was_created = get_or_create_yearly_playlist(2025)
+    state = PlaylistState(playlist_id="cached123", playlist_year=2026, failure_threshold=5)
+    result = resolve_yearly_playlist(state)
 
-    assert was_created is True
-    assert result["id"] == "new_playlist_id"
+    assert result.action is PlaylistAction.USED_CACHED
+    assert result.playlist["id"] == "cached123"
+    mock_sp.current_user_playlists.assert_not_called()  # trusted by id, no search
+    mock_sp.user_playlist_create.assert_not_called()
+
+
+@freeze_time("2026-07-03")
+@patch("utils.spotify_util.get_spotify_client")
+def test_resolve_cached_rejected_when_name_encodes_different_year(mock_get_spotify_client):
+    """A cached id whose name now encodes a DIFFERENT year is rejected -> search."""
+    mock_sp = MagicMock()
+    mock_get_spotify_client.return_value = mock_sp
+    # Cached id verification returns a name for the wrong year.
+    mock_sp.playlist.return_value = {
+        "id": "cached123",
+        "name": "Fredagslistan 2024 🎵",
+        "external_urls": {"spotify": "u"},
+        "description": "",
+        "tracks": {"total": 5},
+    }
+    # Search then confirms no 2026 playlist -> create.
+    mock_sp.current_user_playlists.return_value = {"items": [], "next": None}
+    mock_sp.current_user.return_value = {"id": "user1"}
+    mock_sp.user_playlist_create.return_value = {
+        "id": "new2026",
+        "name": "Fredagslistan 2026 ✨",
+        "external_urls": {"spotify": "u2"},
+    }
+
+    state = PlaylistState(playlist_id="cached123", playlist_year=2026, failure_threshold=5)
+    result = resolve_yearly_playlist(state)
+
+    assert result.action is PlaylistAction.CREATED
+    mock_sp.current_user_playlists.assert_called()  # cache rejected -> searched
+
+
+@freeze_time("2026-07-03")
+@patch("utils.spotify_util.get_spotify_client")
+def test_resolve_found_via_search(mock_get_spotify_client):
+    """No cached state but search finds the year -> FOUND, no create."""
+    mock_sp = MagicMock()
+    mock_get_spotify_client.return_value = mock_sp
+    mock_sp.current_user_playlists.return_value = {
+        "items": [
+            {
+                "id": "search_hit",
+                "name": "Fredagslistan 2026 🎶",
+                "external_urls": {"spotify": "https://open.spotify.com/playlist/search_hit"},
+                "description": "",
+                "tracks": {"total": 8},
+            }
+        ],
+        "next": None,
+    }
+    # Single-candidate validation checks the latest track year (informational).
+    mock_sp.playlist.return_value = {"tracks": {"total": 8}}
+    mock_sp.playlist_tracks.return_value = {"items": [{"added_at": "2026-05-01T10:00:00Z"}]}
+
+    state = PlaylistState(failure_threshold=5)
+    result = resolve_yearly_playlist(state)
+
+    assert result.action is PlaylistAction.FOUND
+    assert result.playlist["id"] == "search_hit"
+    assert result.search_failures == 0
+    mock_sp.user_playlist_create.assert_not_called()
+
+
+@freeze_time("2026-07-03")
+@patch("utils.spotify_util.get_spotify_client")
+def test_resolve_confirmed_absent_creates_playlist(mock_get_spotify_client):
+    """Enumeration succeeded, no match -> CONFIRMED_ABSENT -> CREATED."""
+    mock_sp = MagicMock()
+    mock_get_spotify_client.return_value = mock_sp
+    mock_sp.current_user_playlists.return_value = {
+        "items": [
+            {
+                "id": "unrelated",
+                "name": "Fredagslistan 2024 🎵",
+                "external_urls": {"spotify": "u"},
+                "description": "",
+            }
+        ],
+        "next": None,
+    }
+    mock_sp.current_user.return_value = {"id": "user1"}
+    mock_sp.user_playlist_create.return_value = {
+        "id": "created1",
+        "name": "Fredagslistan 2026 ✨",
+        "external_urls": {"spotify": "https://open.spotify.com/playlist/created1"},
+    }
+
+    state = PlaylistState(search_failures=1, failure_threshold=5)
+    result = resolve_yearly_playlist(state)
+
+    assert result.action is PlaylistAction.CREATED
+    assert result.was_created is True
+    assert result.playlist["id"] == "created1"
+    assert result.playlist_year == 2026
+    assert result.search_failures == 0
+    assert result.exit_code == 0
     mock_sp.user_playlist_create.assert_called_once()
+
+
+@freeze_time("2026-07-03")
+@patch("utils.spotify_util.get_spotify_client")
+def test_resolve_uncertain_never_creates_and_increments(mock_get_spotify_client):
+    """THE KEY GUARANTEE: a search that cannot prove absence never creates."""
+    mock_sp = MagicMock()
+    mock_get_spotify_client.return_value = mock_sp
+    mock_sp.current_user_playlists.side_effect = SpotifyException(500, -1, "boom")
+
+    # Stale year forces cache miss -> hardened search -> UNCERTAIN.
+    state = PlaylistState(
+        playlist_id="prev", playlist_year=2025, search_failures=2, failure_threshold=5
+    )
+    with patch("utils.spotify_util.time.sleep"):
+        result = resolve_yearly_playlist(state)
+
+    assert result.action is PlaylistAction.ABORTED
+    assert result.playlist is None
+    assert result.was_created is False
+    assert result.playlist_id == "prev"  # prior state preserved
+    assert result.playlist_year == 2025
+    assert result.search_failures == 3  # incremented
+    assert result.exit_code == 0  # below threshold
+    mock_sp.user_playlist_create.assert_not_called()
+
+
+@freeze_time("2026-07-03")
+@patch("utils.spotify_util.get_spotify_client")
+def test_resolve_uncertain_at_threshold_sets_exit_code_one(mock_get_spotify_client):
+    """When failures reach the threshold, exit_code flips to 1 (red build)."""
+    mock_sp = MagicMock()
+    mock_get_spotify_client.return_value = mock_sp
+    mock_sp.current_user_playlists.side_effect = SpotifyException(500, -1, "boom")
+
+    state = PlaylistState(
+        playlist_id="prev", playlist_year=2025, search_failures=4, failure_threshold=5
+    )
+    with patch("utils.spotify_util.time.sleep"):
+        result = resolve_yearly_playlist(state)
+
+    assert result.action is PlaylistAction.ABORTED
+    assert result.search_failures == 5
+    assert result.exit_code == 1
+    mock_sp.user_playlist_create.assert_not_called()
+
+
+@freeze_time("2026-07-03")
+@patch("utils.spotify_util.get_spotify_client")
+def test_resolve_search_retries_then_succeeds(mock_get_spotify_client):
+    """A transient error followed by success must NOT be treated as uncertain."""
+    mock_sp = MagicMock()
+    mock_get_spotify_client.return_value = mock_sp
+    mock_sp.current_user_playlists.side_effect = [
+        SpotifyException(500, -1, "transient"),
+        {
+            "items": [
+                {
+                    "id": "retry_hit",
+                    "name": "Fredagslistan 2026 🎧",
+                    "external_urls": {"spotify": "u"},
+                    "description": "",
+                    "tracks": {"total": 3},
+                }
+            ],
+            "next": None,
+        },
+    ]
+    # Single-candidate validation checks the latest track year (informational).
+    mock_sp.playlist.return_value = {"tracks": {"total": 3}}
+    mock_sp.playlist_tracks.return_value = {"items": [{"added_at": "2026-05-01T10:00:00Z"}]}
+
+    state = PlaylistState(failure_threshold=5)
+    with patch("utils.spotify_util.time.sleep") as mock_sleep:
+        result = resolve_yearly_playlist(state)
+
+    assert result.action is PlaylistAction.FOUND
+    assert result.playlist["id"] == "retry_hit"
+    assert mock_sleep.called  # backoff happened between attempts
+
+
+@freeze_time("2026-07-03")
+@patch("utils.spotify_util.get_spotify_client")
+def test_resolve_sanity_check_warns_on_zero_tracks(mock_get_spotify_client, capsys):
+    """Resolving to an EXISTING but empty playlist warns, does not recreate."""
+    mock_sp = MagicMock()
+    mock_get_spotify_client.return_value = mock_sp
+    mock_sp.playlist.return_value = {
+        "id": "cached_empty",
+        "name": "Fredagslistan 2026 🎵",
+        "external_urls": {"spotify": "u"},
+        "description": "",
+        "tracks": {"total": 0},
+    }
+
+    state = PlaylistState(playlist_id="cached_empty", playlist_year=2026, failure_threshold=5)
+    result = resolve_yearly_playlist(state)
+
+    assert result.action is PlaylistAction.USED_CACHED
+    out = capsys.readouterr().out
+    assert "0 tracks" in out
+    # A zero-track anomaly must never trigger a duplicate create.
+    mock_sp.user_playlist_create.assert_not_called()
+
+
+# =============================================================================
+# PLAYLIST_NAME_PREFIX_PATTERN regex fix (leading emoji / whitespace tolerance)
+# =============================================================================
+
+
+class TestPlaylistNamePrefixRegex:
+    """The prefix pattern must tolerate leading emoji/space without over-matching."""
+
+    def test_leading_emoji_matches(self):
+        assert extract_year_from_playlist_name("🎵 Fredagslistan 2026") == 2026
+
+    def test_leading_and_trailing_whitespace_matches(self):
+        assert extract_year_from_playlist_name(" Fredagslistan 2025 ") == 2025
+
+    def test_multi_year_format_matches(self):
+        assert extract_year_from_playlist_name("Fredagslistan 2024-25") == 2025
+
+    def test_embedded_fredagslistan_does_not_match(self):
+        # "My Fredagslistan clone" is a different playlist, not ours.
+        assert extract_year_from_playlist_name("My Fredagslistan clone") is None
+
+    def test_unrelated_name_with_year_does_not_match(self):
+        assert extract_year_from_playlist_name("Random 2026") is None
+
+    def test_leading_digit_does_not_match(self):
+        # A year before the word must not be accepted as our prefix.
+        assert extract_year_from_playlist_name("2026 Fredagslistan") is None
+
+    def test_longer_word_with_prefix_does_not_match(self):
+        # "Fredagslistanish" merely starts with the prefix; the trailing \b
+        # boundary must reject it so we don't adopt an unrelated playlist.
+        assert extract_year_from_playlist_name("Fredagslistanish 2026") is None
