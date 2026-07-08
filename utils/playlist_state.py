@@ -15,6 +15,8 @@ from enum import StrEnum
 
 DEFAULT_FAILURE_THRESHOLD = 5
 
+_DRY_RUN_TRUTHY = {"1", "true", "yes", "on"}
+
 
 class PlaylistAction(StrEnum):
     """What the resolver decided to do this run."""
@@ -22,6 +24,7 @@ class PlaylistAction(StrEnum):
     USED_CACHED = "USED_CACHED"
     FOUND = "FOUND"
     CREATED = "CREATED"
+    WOULD_CREATE = "WOULD_CREATE"
     ABORTED = "ABORTED"
 
 
@@ -67,6 +70,17 @@ def _parse_optional_int(raw: str | None) -> int | None:
         return int(raw.strip())
     except ValueError:
         return None
+
+
+def is_dry_run(env: Mapping[str, str] | None = None) -> bool:
+    """True when the ``DRY_RUN`` env var is set to a recognised truthy value.
+
+    Case-insensitive, whitespace-tolerant. Absent, blank, or anything else
+    (including "0"/"false"/"no"/"off") is False.
+    """
+    if env is None:
+        env = os.environ
+    return (env.get("DRY_RUN") or "").strip().lower() in _DRY_RUN_TRUTHY
 
 
 def read_state_from_env(env: Mapping[str, str] | None = None) -> PlaylistState:

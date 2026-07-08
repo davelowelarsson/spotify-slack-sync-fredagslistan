@@ -3,7 +3,7 @@
 
 from datetime import datetime
 
-from utils.playlist_state import read_state_from_env, write_github_output
+from utils.playlist_state import is_dry_run, read_state_from_env, write_github_output
 from utils.slack_util import announce_new_playlist, get_recent_slack_tracks, get_year_contributors
 from utils.spotify_util import (
     add_songs_to_spotify_playlist,
@@ -79,9 +79,13 @@ def main() -> None:
     print(f"Starting Fredagslistan sync at {datetime.now().isoformat()}")
     print(f"Using channel: {ACTIVE_CHANNEL_ID}")
 
+    dry_run = is_dry_run()
+    if dry_run:
+        print("🧪 DRY RUN mode — no writes will be made")
+
     # Resolve the playlist from durable state (never creates on uncertainty).
     state = read_state_from_env()
-    result = resolve_yearly_playlist(state)
+    result = resolve_yearly_playlist(state, dry_run=dry_run)
 
     # Emit state IMMEDIATELY — before any Spotify/Slack writes — so the resolved
     # playlist id and failure counter survive even if a later network call
@@ -103,8 +107,10 @@ def main() -> None:
 
     # Announce ONLY when a playlist was actually created. This is the coupling
     # guarantee: a cache miss / search failure resolves to result.playlist=None
-    # above and never reaches this branch.
-    if result.was_created:
+    # above and never reaches this branch. `was_created` is only ever True on a
+    # real CREATED action, which cannot happen in dry_run (see WOULD_CREATE
+    # above) -- the `not dry_run` guard is kept explicit for clarity.
+    if result.was_created and not dry_run:
         print("New playlist created! Announcing in Slack...")
 
         # Get stats from last year's playlist for the announcement
@@ -143,13 +149,15 @@ def main() -> None:
         else:
             print("❌ Failed to update channel topic")
 
-    # Get the songs to add to the spotify list
+    # Get the songs to add to the spotify list (read-only: runs in dry_run too).
     songs_to_add, _songs_to_add_full = compare_lists_and_remove_duplicates(playlist_id=playlist_id)
 
-    # Add the songs to the spotify list
-    add_songs_to_spotify_playlist(playlist_id=playlist_id, track_ids=songs_to_add)
-
-    print(f"\n✅ Sync complete. Added {len(songs_to_add)} tracks to {playlist['name']}")
+    if dry_run:
+        print(f"DRY RUN: would add {len(songs_to_add)} tracks to {playlist['name']}")
+    else:
+        # Add the songs to the spotify list
+        add_songs_to_spotify_playlist(playlist_id=playlist_id, track_ids=songs_to_add)
+        print(f"\n✅ Sync complete. Added {len(songs_to_add)} tracks to {playlist['name']}")
 
 
 if __name__ == "__main__":
