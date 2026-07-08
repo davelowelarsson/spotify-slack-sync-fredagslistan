@@ -76,12 +76,17 @@ jobs:
         # already emitted before those writes). Excluded on a dry-run push.
         if: ${{ always() && steps.sync.outputs.action != '' && github.event_name != 'push' }}
         continue-on-error: true
+        # Step outputs are passed via env (never interpolated straight into the
+        # shell) and referenced quoted, to avoid any command-injection surface.
         env:
           GH_TOKEN: ${{ secrets.GH_STATE_TOKEN }}
+          PLAYLIST_ID: ${{ steps.sync.outputs.playlist_id }}
+          PLAYLIST_YEAR: ${{ steps.sync.outputs.playlist_year }}
+          SEARCH_FAILURES: ${{ steps.sync.outputs.search_failures }}
         run: |
-          gh variable set FREDAGSLISTAN_PLAYLIST_ID --body "${{ steps.sync.outputs.playlist_id }}"
-          gh variable set FREDAGSLISTAN_PLAYLIST_YEAR --body "${{ steps.sync.outputs.playlist_year }}"
-          gh variable set FREDAGSLISTAN_SEARCH_FAILURES --body "${{ steps.sync.outputs.search_failures }}"
+          gh variable set FREDAGSLISTAN_PLAYLIST_ID --body "$PLAYLIST_ID"
+          gh variable set FREDAGSLISTAN_PLAYLIST_YEAR --body "$PLAYLIST_YEAR"
+          gh variable set FREDAGSLISTAN_SEARCH_FAILURES --body "$SEARCH_FAILURES"
 
       # Turn the build red (→ notification email) ONLY after state was
       # persisted, based on the emitted exit_code (e.g. failure counter reached
