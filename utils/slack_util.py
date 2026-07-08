@@ -9,24 +9,23 @@
 # return list
 
 # import the slack client
-from slack_sdk import WebClient
-from slack_sdk.errors import SlackApiError
 import os
-from dotenv import load_dotenv
 import re
 from collections import Counter
-from datetime import datetime, timedelta, timezone
-from typing import Optional
+from datetime import UTC, datetime, timedelta
+
+from dotenv import load_dotenv
+from slack_sdk import WebClient
+from slack_sdk.errors import SlackApiError
 
 from utils.texts import (
-    SLACK_TOPIC_TEMPLATES as TOPIC_MESSAGES,
-    get_random_topic_message,
-    get_random_announcement_header,
-    get_random_announcement_body,
-    get_random_stats_intro,
-    format_top_genres,
     format_top_artists,
     format_top_contributors,
+    format_top_genres,
+    get_random_announcement_body,
+    get_random_announcement_header,
+    get_random_stats_intro,
+    get_random_topic_message,
 )
 
 # Load .env file
@@ -45,7 +44,7 @@ def get_slack_client() -> tuple[str | None, WebClient]:
 
 
 def check_slack_token() -> None:
-    slack_token, client = get_slack_client()
+    _slack_token, client = get_slack_client()
 
     try:
         response = client.auth_test()
@@ -72,7 +71,7 @@ def extract_spotify_track_ids(text: str) -> list[str]:
     # - track/ followed by optional 2-letter country code and slash
     # - then capture the track ID (alphanumeric, typically 22 chars)
     # - stops at ? or whitespace or end of string
-    pattern = r'open\.spotify\.com/track/(?:[A-Z]{2}/)?([a-zA-Z0-9]+)'
+    pattern = r"open\.spotify\.com/track/(?:[A-Z]{2}/)?([a-zA-Z0-9]+)"
     return re.findall(pattern, text)
 
 
@@ -87,15 +86,14 @@ def is_message_within_window(message: dict, days_back: int = 6) -> bool:
     Returns:
         True if the message is from today or within the last `days_back` days
     """
-    message_timestamp = int(message['ts'].split(".")[0])
+    message_timestamp = int(message["ts"].split(".")[0])
     # Convert Unix timestamp to UTC datetime
-    message_datetime = datetime.fromtimestamp(message_timestamp, tz=timezone.utc)
+    message_datetime = datetime.fromtimestamp(message_timestamp, tz=UTC)
 
     # Calculate the cutoff date (start of day, days_back days ago) in UTC
-    now = datetime.now(tz=timezone.utc)
+    now = datetime.now(tz=UTC)
     cutoff = now - timedelta(days=days_back)
-    cutoff_start_of_day = cutoff.replace(
-        hour=0, minute=0, second=0, microsecond=0)
+    cutoff_start_of_day = cutoff.replace(hour=0, minute=0, second=0, microsecond=0)
 
     return message_datetime >= cutoff_start_of_day
 
@@ -107,14 +105,14 @@ _user_cache: dict[str, str] = {}
 def get_user_display_name(client: WebClient, user_id: str) -> str:
     """
     Get the display name for a Slack user.
-    
+
     Uses a cache to avoid repeated API calls for the same user.
     Falls back to user_id if the lookup fails.
-    
+
     Args:
         client: Slack WebClient instance
         user_id: Slack user ID (e.g., 'U012AB3CDE')
-    
+
     Returns:
         User's display name, real name, or user ID as fallback
     """
@@ -124,15 +122,15 @@ def get_user_display_name(client: WebClient, user_id: str) -> str:
 
     try:
         response = client.users_info(user=user_id)
-        if response['ok']:
-            user = response['user']
-            profile = user.get('profile', {})
+        if response["ok"]:
+            user = response["user"] or {}
+            profile = user.get("profile", {})
             # Prefer display_name, fall back to real_name, then name
             name = (
-                profile.get('display_name') or
-                profile.get('real_name') or
-                user.get('name') or
-                user_id
+                profile.get("display_name")
+                or profile.get("real_name")
+                or user.get("name")
+                or user_id
             )
             _user_cache[user_id] = name
             return name
@@ -157,17 +155,15 @@ def get_recent_slack_tracks(channel_id: str = "CAB3JFSQN") -> list[dict]:
     Returns:
         List of dicts with 'track_id', 'timestamp', 'user_id', and 'user_name' keys
     """
-    slack_token, client = get_slack_client()
+    _slack_token, client = get_slack_client()
 
     check_slack_token()
 
     # get the messages from the #fredagslistan channel
-    response = client.conversations_history(
-        channel=channel_id
-    )
+    response = client.conversations_history(channel=channel_id)
 
     # retrieve the messages
-    messages = response['messages']
+    messages = response["messages"] or []
 
     # Track all spotify links found (using set to avoid duplicates)
     seen_track_ids = set()
@@ -177,152 +173,143 @@ def get_recent_slack_tracks(channel_id: str = "CAB3JFSQN") -> list[dict]:
         """Add a track if not already seen, including user attribution."""
         if track_id not in seen_track_ids:
             seen_track_ids.add(track_id)
-            user_name = get_user_display_name(
-                client, user_id) if user_id else "Unknown"
-            spotify_links.append({
-                'track_id': track_id,
-                'timestamp': timestamp,
-                'user_id': user_id,
-                'user_name': user_name
-            })
+            user_name = get_user_display_name(client, user_id) if user_id else "Unknown"
+            spotify_links.append(
+                {
+                    "track_id": track_id,
+                    "timestamp": timestamp,
+                    "user_id": user_id,
+                    "user_name": user_name,
+                }
+            )
 
     # Process each message within the rolling window
     for message in messages:
         if not is_message_within_window(message):
             continue
 
-        user_id = message.get('user', '')
+        user_id = message.get("user", "")
 
         # Extract all Spotify track IDs from this message
-        track_ids = extract_spotify_track_ids(message.get('text', ''))
+        track_ids = extract_spotify_track_ids(message.get("text", ""))
         for track_id in track_ids:
-            add_track(track_id, message['ts'], user_id)
+            add_track(track_id, message["ts"], user_id)
 
         # Check if this message has thread replies
-        reply_count = message.get('reply_count', 0)
+        reply_count = message.get("reply_count", 0)
         if reply_count > 0:
             # Fetch thread replies
-            thread_ts = message.get('thread_ts', message['ts'])
+            thread_ts = message.get("thread_ts", message["ts"])
             try:
-                replies_response = client.conversations_replies(
-                    channel=channel_id,
-                    ts=thread_ts
-                )
-                thread_messages = replies_response.get('messages', [])
+                replies_response = client.conversations_replies(channel=channel_id, ts=thread_ts)
+                thread_messages = replies_response.get("messages", [])
 
                 # Process thread messages (skip first one as it's the parent, already processed)
                 for thread_message in thread_messages[1:]:
                     if is_message_within_window(thread_message):
-                        thread_user_id = thread_message.get('user', '')
+                        thread_user_id = thread_message.get("user", "")
                         thread_track_ids = extract_spotify_track_ids(
-                            thread_message.get('text', ''))
+                            thread_message.get("text", "")
+                        )
                         for track_id in thread_track_ids:
-                            add_track(
-                                track_id, thread_message['ts'], thread_user_id)
+                            add_track(track_id, thread_message["ts"], thread_user_id)
             except SlackApiError as e:
                 print(f"Error fetching thread replies: {e.response['error']}")
 
     return spotify_links
 
 
-def get_year_contributors(
-    channel_id: str,
-    year: int,
-    limit: int = 5
-) -> list[dict]:
+def get_year_contributors(channel_id: str, year: int, limit: int = 5) -> list[dict]:
     """
     Get top contributors for a specific year from Slack message history.
-    
+
     Scans messages from the entire year to count who shared the most Spotify tracks.
     This is intended for yearly stats and should only be called once per year.
-    
+
     Note: This can make many API calls due to pagination. Use sparingly.
-    
+
     Args:
         channel_id: Slack channel ID to scan
         year: The year to get contributors for
         limit: Number of top contributors to return (default: 5)
-    
+
     Returns:
         List of dicts with 'user_id', 'user_name', and 'track_count' keys,
         sorted by track_count descending
     """
-    slack_token, client = get_slack_client()
-    
+    _slack_token, client = get_slack_client()
+
     # Calculate start and end timestamps for the year
-    start_of_year = datetime(year, 1, 1, 0, 0, 0, tzinfo=timezone.utc)
-    end_of_year = datetime(year, 12, 31, 23, 59, 59, tzinfo=timezone.utc)
-    
+    start_of_year = datetime(year, 1, 1, 0, 0, 0, tzinfo=UTC)
+    end_of_year = datetime(year, 12, 31, 23, 59, 59, tzinfo=UTC)
+
     oldest = str(start_of_year.timestamp())
     latest = str(end_of_year.timestamp())
-    
+
     print(f"Scanning Slack messages from {year} for top contributors...")
-    
+
     user_track_counts: Counter = Counter()
     total_messages = 0
-    
+
     # Paginate through message history
     cursor = None
     while True:
         try:
             kwargs = {
-                'channel': channel_id,
-                'oldest': oldest,
-                'latest': latest,
-                'limit': 200,  # Max per request
+                "channel": channel_id,
+                "oldest": oldest,
+                "latest": latest,
+                "limit": 200,  # Max per request
             }
             if cursor:
-                kwargs['cursor'] = cursor
-                
+                kwargs["cursor"] = cursor
+
             response = client.conversations_history(**kwargs)
-            messages = response.get('messages', [])
-            
+            messages = response.get("messages", [])
+
             for message in messages:
                 total_messages += 1
-                user_id = message.get('user', '')
-                
+                user_id = message.get("user", "")
+
                 # Count tracks in this message
-                track_ids = extract_spotify_track_ids(message.get('text', ''))
+                track_ids = extract_spotify_track_ids(message.get("text", ""))
                 if track_ids and user_id:
                     user_track_counts[user_id] += len(track_ids)
-                
+
                 # Also check thread replies if any
-                if message.get('reply_count', 0) > 0:
-                    thread_ts = message.get('thread_ts', message['ts'])
+                if message.get("reply_count", 0) > 0:
+                    thread_ts = message.get("thread_ts", message["ts"])
                     try:
-                        replies = client.conversations_replies(
-                            channel=channel_id,
-                            ts=thread_ts
-                        )
-                        for reply in replies.get('messages', [])[1:]:  # Skip parent
-                            reply_user = reply.get('user', '')
-                            reply_tracks = extract_spotify_track_ids(reply.get('text', ''))
+                        replies = client.conversations_replies(channel=channel_id, ts=thread_ts)
+                        for reply in replies.get("messages", [])[1:]:  # Skip parent
+                            reply_user = reply.get("user", "")
+                            reply_tracks = extract_spotify_track_ids(reply.get("text", ""))
                             if reply_tracks and reply_user:
                                 user_track_counts[reply_user] += len(reply_tracks)
                     except SlackApiError:
                         pass  # Skip thread if we can't fetch it
-            
+
             # Check for more pages
-            cursor = response.get('response_metadata', {}).get('next_cursor')
+            cursor = response.get("response_metadata", {}).get("next_cursor")
             if not cursor:
                 break
-                
+
         except SlackApiError as e:
             print(f"Error fetching message history: {e.response['error']}")
             break
-    
-    print(f"Scanned {total_messages} messages, found {sum(user_track_counts.values())} track shares")
-    
+
+    print(
+        f"Scanned {total_messages} messages, found {sum(user_track_counts.values())} track shares"
+    )
+
     # Get top contributors and resolve their names
     top_contributors = []
     for user_id, track_count in user_track_counts.most_common(limit):
         user_name = get_user_display_name(client, user_id)
-        top_contributors.append({
-            'user_id': user_id,
-            'user_name': user_name,
-            'track_count': track_count
-        })
-    
+        top_contributors.append(
+            {"user_id": user_id, "user_name": user_name, "track_count": track_count}
+        )
+
     return top_contributors
 
 
@@ -333,21 +320,18 @@ def get_year_contributors(
 def update_channel_topic(channel_id: str, topic: str) -> bool:
     """
     Update the topic of a Slack channel.
-    
+
     Args:
         channel_id: The Slack channel ID
         topic: The new topic text
-    
+
     Returns:
         True if successful, False otherwise
     """
-    slack_token, client = get_slack_client()
+    _slack_token, client = get_slack_client()
 
     try:
-        response = client.conversations_setTopic(
-            channel=channel_id,
-            topic=topic
-        )
+        response = client.conversations_setTopic(channel=channel_id, topic=topic)
         if response["ok"]:
             print(f"Successfully updated channel topic to: {topic}")
             return True
@@ -364,11 +348,11 @@ def post_playlist_announcement(
     playlist_name: str,
     playlist_url: str,
     year: int,
-    previous_year_stats: Optional[dict] = None
+    previous_year_stats: dict | None = None,
 ) -> bool:
     """
     Post a playlist announcement message to Slack using Block Kit.
-    
+
     Args:
         channel_id: The Slack channel ID to post to
         playlist_name: The name of the playlist
@@ -376,11 +360,11 @@ def post_playlist_announcement(
         year: The playlist year
         previous_year_stats: Optional dict with stats from previous year
             (track_count, top_artists, top_genres, year)
-    
+
     Returns:
         True if successful, False otherwise
     """
-    slack_token, client = get_slack_client()
+    _slack_token, client = get_slack_client()
 
     # Get dynamic texts
     header_text = get_random_announcement_header(year)
@@ -388,143 +372,126 @@ def post_playlist_announcement(
 
     # Build Block Kit message
     blocks = [
+        {"type": "header", "text": {"type": "plain_text", "text": header_text, "emoji": True}},
         {
-            "type": "header",
-            "text": {
-                "type": "plain_text",
-                "text": header_text,
-                "emoji": True
-            }
+            "type": "section",
+            "text": {"type": "mrkdwn", "text": f"{body_text}\n\n*{playlist_name}*"},
         },
         {
             "type": "section",
             "text": {
                 "type": "mrkdwn",
-                "text": f"{body_text}\n\n*{playlist_name}*"
-            }
-        },
-        {
-            "type": "section",
-            "text": {
-                "type": "mrkdwn",
-                "text": "Dela Spotify-låtar i den här kanalen så läggs de automatiskt till i listan. Kör hårt! 🚀"
-            }
+                "text": (
+                    "Dela Spotify-låtar i den här kanalen så läggs de "
+                    "automatiskt till i listan. Kör hårt! 🚀"
+                ),
+            },
         },
         {
             "type": "actions",
             "elements": [
                 {
                     "type": "button",
-                    "text": {
-                        "type": "plain_text",
-                        "text": "🎧 Öppna i Spotify",
-                        "emoji": True
-                    },
+                    "text": {"type": "plain_text", "text": "🎧 Öppna i Spotify", "emoji": True},
                     "url": playlist_url,
-                    "action_id": "open_spotify_playlist"
+                    "action_id": "open_spotify_playlist",
                 }
-            ]
+            ],
         },
     ]
 
     # Add previous year stats if available
-    if previous_year_stats and previous_year_stats.get('track_count', 0) > 0:
+    if previous_year_stats and previous_year_stats.get("track_count", 0) > 0:
         playlist_name = previous_year_stats.get(
-            'playlist_name', f"Fredagslistan {previous_year_stats['year']}")
-        stats_intro = get_random_stats_intro(
-            playlist_name,
-            previous_year_stats['track_count']
+            "playlist_name", f"Fredagslistan {previous_year_stats['year']}"
         )
+        stats_intro = get_random_stats_intro(playlist_name, previous_year_stats["track_count"])
 
         stats_blocks = [
             {"type": "divider"},
-            {
-                "type": "section",
-                "text": {
-                    "type": "mrkdwn",
-                    "text": f"*Från förra listan:*"
-                }
-            },
-            {
-                "type": "section",
-                "text": {
-                    "type": "mrkdwn",
-                    "text": stats_intro
-                }
-            },
+            {"type": "section", "text": {"type": "mrkdwn", "text": "*Från förra listan:*"}},
+            {"type": "section", "text": {"type": "mrkdwn", "text": stats_intro}},
         ]
 
         # Add top genres if available
-        if previous_year_stats.get('top_genres'):
-            genres_text = format_top_genres(
-                previous_year_stats['top_genres'], limit=5)
-            stats_blocks.append({
-                "type": "section",
-                "text": {
-                    "type": "mrkdwn",
-                    "text": f"*Topgenrer:* {genres_text}"
+        if previous_year_stats.get("top_genres"):
+            genres_text = format_top_genres(previous_year_stats["top_genres"], limit=5)
+            stats_blocks.append(
+                {
+                    "type": "section",
+                    "text": {"type": "mrkdwn", "text": f"*Topgenrer:* {genres_text}"},
                 }
-            })
+            )
 
         # Add top artists if available
-        if previous_year_stats.get('top_artists'):
-            artists_text = format_top_artists(
-                previous_year_stats['top_artists'], limit=5)
-            stats_blocks.append({
-                "type": "section",
-                "text": {
-                    "type": "mrkdwn",
-                    "text": f"*Topartister:* {artists_text}"
+        if previous_year_stats.get("top_artists"):
+            artists_text = format_top_artists(previous_year_stats["top_artists"], limit=5)
+            stats_blocks.append(
+                {
+                    "type": "section",
+                    "text": {"type": "mrkdwn", "text": f"*Topartister:* {artists_text}"},
                 }
-            })
+            )
 
         # Add top contributors if available
-        if previous_year_stats.get('top_contributors'):
+        if previous_year_stats.get("top_contributors"):
             contributors_text = format_top_contributors(
-                previous_year_stats['top_contributors'], limit=5)
-            stats_blocks.append({
-                "type": "section",
-                "text": {
-                    "type": "mrkdwn",
-                    "text": f"*Mest aktiva bidragsgivare:* {contributors_text}"
+                previous_year_stats["top_contributors"], limit=5
+            )
+            stats_blocks.append(
+                {
+                    "type": "section",
+                    "text": {
+                        "type": "mrkdwn",
+                        "text": f"*Mest aktiva bidragsgivare:* {contributors_text}",
+                    },
                 }
-            })
+            )
 
         # Add link to previous year's playlist
-        if previous_year_stats.get('playlist_url'):
-            stats_blocks.append({
-                "type": "context",
-                "elements": [
-                    {
-                        "type": "mrkdwn",
-                        "text": f"<{previous_year_stats['playlist_url']}|🎵 Lyssna på {previous_year_stats['year']} års lista>"
-                    }
-                ]
-            })
+        if previous_year_stats.get("playlist_url"):
+            stats_blocks.append(
+                {
+                    "type": "context",
+                    "elements": [
+                        {
+                            "type": "mrkdwn",
+                            "text": (
+                                f"<{previous_year_stats['playlist_url']}|🎵 "
+                                f"Lyssna på {previous_year_stats['year']} års lista>"
+                            ),
+                        }
+                    ],
+                }
+            )
 
         blocks.extend(stats_blocks)
 
     # Add footer
-    blocks.append({
-        "type": "context",
-        "elements": [
-            {
-                "type": "mrkdwn",
-                "text": f"Skapad automatiskt av Fredagslistan-boten • {datetime.now(tz=timezone.utc).strftime('%Y-%m-%d')}"
-            }
-        ]
-    })
+    blocks.append(
+        {
+            "type": "context",
+            "elements": [
+                {
+                    "type": "mrkdwn",
+                    "text": (
+                        f"Skapad automatiskt av Fredagslistan-boten • "
+                        f"{datetime.now(tz=UTC).strftime('%Y-%m-%d')}"
+                    ),
+                }
+            ],
+        }
+    )
 
     try:
         response = client.chat_postMessage(
             channel=channel_id,
             # Fallback text
             text=f"🎉 Ny Fredagslista för {year}! {playlist_url}",
-            blocks=blocks
+            blocks=blocks,
         )
         if response["ok"]:
-            print(
-                f"Successfully posted playlist announcement to channel {channel_id}")
+            print(f"Successfully posted playlist announcement to channel {channel_id}")
             return True
         else:
             print(f"Failed to post announcement: {response}")
@@ -537,35 +504,35 @@ def post_playlist_announcement(
 def announce_new_playlist(
     channel_id: str,
     playlist: dict,
-    year: Optional[int] = None,
-    previous_year_stats: Optional[dict] = None
+    year: int | None = None,
+    previous_year_stats: dict | None = None,
 ) -> tuple[bool, bool]:
     """
     Announce a new playlist by posting a message and updating the channel topic.
-    
+
     Args:
         channel_id: The Slack channel ID
         playlist: Playlist dict with 'name', 'url', 'id', 'description'
         year: The playlist year (defaults to current year)
         previous_year_stats: Optional dict with stats from previous year
-    
+
     Returns:
         Tuple of (message_posted, topic_updated) booleans
     """
     if year is None:
-        year = datetime.now(tz=timezone.utc).year
+        year = datetime.now(tz=UTC).year
 
     # Post announcement message
     message_posted = post_playlist_announcement(
         channel_id=channel_id,
-        playlist_name=playlist['name'],
-        playlist_url=playlist['url'],
+        playlist_name=playlist["name"],
+        playlist_url=playlist["url"],
         year=year,
-        previous_year_stats=previous_year_stats
+        previous_year_stats=previous_year_stats,
     )
 
     # Update channel topic
-    topic = get_random_topic_message(year, playlist['url'])
+    topic = get_random_topic_message(year, playlist["url"])
     topic_updated = update_channel_topic(channel_id, topic)
 
     return message_posted, topic_updated
