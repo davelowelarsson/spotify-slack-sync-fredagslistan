@@ -27,14 +27,15 @@ jobs:
       - name: Run tests
         run: uv run pytest -q
 
-      # NOTE: `push` currently runs a real sync. Phase 2 (#17) wires push -> DRY_RUN
-      # so pushes self-test without writing to Spotify/Slack; scheduled and manual
-      # (workflow_dispatch) runs stay real.
+      # Phase 2 (#17): push -> DRY_RUN. A push to main self-tests the full
+      # pipeline (reads, search, compare) with ZERO side effects; scheduled and
+      # manual (workflow_dispatch) runs stay real. DRY_RUN=1 only on push.
       # Secrets are scoped to this step only (least privilege) — earlier steps
       # (checkout, uv install, tests) never receive them.
       - name: Run main.py
         id: sync
         env:
+          DRY_RUN: ${{ github.event_name == 'push' && '1' || '0' }}
           SLACK_API_TOKEN: ${{ secrets.SLACK_API_TOKEN }}
           SPOTIPY_CLIENT_ID: ${{ secrets.SPOTIPY_CLIENT_ID }}
           SPOTIPY_CLIENT_SECRET: ${{ secrets.SPOTIPY_CLIENT_SECRET }}
@@ -54,6 +55,7 @@ jobs:
       # whenever main.py emitted outputs (including on a safe ABORT), because
       # the incremented counter MUST survive to the next run — that is why
       # main.py always exits 0 and the build is only failed in a LATER step.
+      # Skipped on a dry-run push: a self-test must never persist state.
       #
       # `always()` is critical: main.py emits its outputs BEFORE the announce/
       # sync network calls, so even if one of those crashes the Run step, the
@@ -66,7 +68,9 @@ jobs:
       # step errors, but `continue-on-error` keeps the job green: the sync
       # still runs, it just won't remember state between runs.
       - name: Persist playlist state
-        if: ${{ always() && steps.sync.outputs.action != '' }}
+        # always(): persist even if the announce/sync step crashed (state was
+        # already emitted before those writes). Excluded on a dry-run push.
+        if: ${{ always() && steps.sync.outputs.action != '' && github.event_name != 'push' }}
         continue-on-error: true
         env:
           GH_TOKEN: ${{ secrets.GH_STATE_TOKEN }}
@@ -78,8 +82,9 @@ jobs:
       # Turn the build red (→ notification email) ONLY after state was
       # persisted, based on the emitted exit_code (e.g. failure counter reached
       # the threshold). Keeping this separate is what lets the counter survive.
+      # Skipped on a dry-run push: a self-test must never redden the build.
       - name: Fail job if sync reported a non-zero exit code
-        if: ${{ steps.sync.outputs.exit_code != '0' }}
+        if: ${{ steps.sync.outputs.exit_code != '0' && github.event_name != 'push' }}
         run: |
           echo "Sync reported exit_code=${{ steps.sync.outputs.exit_code }}"
           echo "Search failures reached the configured threshold — failing the build."

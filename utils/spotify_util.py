@@ -415,7 +415,9 @@ def _warn_if_playlist_empty(playlist: dict) -> None:
         )
 
 
-def resolve_yearly_playlist(state: PlaylistState, year: int | None = None) -> ResolutionResult:
+def resolve_yearly_playlist(
+    state: PlaylistState, year: int | None = None, dry_run: bool = False
+) -> ResolutionResult:
     """Resolve the current-year playlist without ever creating on uncertainty.
 
     Algorithm:
@@ -423,7 +425,9 @@ def resolve_yearly_playlist(state: PlaylistState, year: int | None = None) -> Re
          USED_CACHED (reset failures).
       2. Otherwise run the hardened search:
          - FOUND -> use it.
-         - CONFIRMED_ABSENT -> create + (caller announces).
+         - CONFIRMED_ABSENT -> create + (caller announces). In dry_run mode,
+           no playlist is created; instead WOULD_CREATE is reported with no
+           playlist, unchanged failures, and exit_code 0.
          - UNCERTAIN -> ABORTED: keep prior state, bump failure counter,
            never create.
       3. For an existing resolved playlist, warn (only) if it has 0 tracks.
@@ -450,6 +454,18 @@ def resolve_yearly_playlist(state: PlaylistState, year: int | None = None) -> Re
         return success_result(state, PlaylistAction.FOUND, candidate, year)
 
     if search.outcome is SearchOutcome.CONFIRMED_ABSENT:
+        if dry_run:
+            print(f"DRY RUN: would create a new Fredagslistan playlist for {year}")
+            return ResolutionResult(
+                action=PlaylistAction.WOULD_CREATE,
+                playlist=None,
+                playlist_id=state.playlist_id,
+                playlist_year=state.playlist_year,
+                search_failures=state.search_failures,
+                failure_threshold=state.failure_threshold,
+                was_created=False,
+                exit_code=0,
+            )
         print(f"No playlist for {year} (confirmed absent) — creating a new one")
         new_playlist = create_yearly_playlist(year)
         return success_result(state, PlaylistAction.CREATED, new_playlist, year, was_created=True)
