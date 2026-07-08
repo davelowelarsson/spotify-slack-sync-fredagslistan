@@ -33,7 +33,7 @@ Automatically syncs Spotify tracks shared in a Slack channel to a collaborative 
 
 ### Prerequisites
 
-- Python 3.13+ (managed via [mise](https://mise.jdx.dev/) or pyenv)
+- [uv](https://docs.astral.sh/uv/) (manages Python 3.13+ and dependencies)
 - Slack Bot Token with these scopes:
   - `channels:history` - Read messages from channels
   - `chat:write` - Post announcement messages
@@ -53,23 +53,13 @@ Automatically syncs Spotify tracks shared in a Slack channel to a collaborative 
    cd spotify-slack-sync-fredagslistan
    ```
 
-2. Install Python (using mise)
+2. Install dependencies (uv creates the virtualenv and installs Python 3.13 if needed)
 
    ```sh
-   mise install
+   uv sync
    ```
 
-   Or using pyenv:
-
-   ```sh
-   pyenv install
-   ```
-
-3. Install dependencies
-
-   ```sh
-   pip install -r requirements.txt
-   ```
+   > Using [mise](https://mise.jdx.dev/)? `mise install` provisions both Python and uv.
 
 4. Configure environment variables
 
@@ -90,7 +80,7 @@ Automatically syncs Spotify tracks shared in a Slack channel to a collaborative 
 5. Run the sync
 
    ```sh
-   python main.py
+   uv run python main.py
    ```
 
 ## Usage
@@ -98,7 +88,7 @@ Automatically syncs Spotify tracks shared in a Slack channel to a collaborative 
 ### Manual Run
 
 ```sh
-python main.py
+uv run python main.py
 ```
 
 ### Automated (GitHub Actions)
@@ -109,9 +99,9 @@ The workflow runs every 15 minutes on Fridays between 07:00-19:00 UTC.
 ### Running Tests
 
 ```sh
-pytest                           # Run all tests
-pytest -v                        # Verbose output
-pytest tests/test_slack_util.py  # Specific test file
+uv run pytest                           # Run all tests
+uv run pytest -v                        # Verbose output
+uv run pytest tests/test_slack_util.py  # Specific test file
 ```
 
 ## Built With
@@ -140,7 +130,7 @@ pytest tests/test_slack_util.py  # Specific test file
 
 First-time setup requires manual OAuth authentication:
 
-1. Run `python main.py`
+1. Run `uv run python main.py`
 2. A browser window opens for Spotify authorization
 3. After authorizing, copy the redirect URL
 4. Paste in terminal when prompted:
