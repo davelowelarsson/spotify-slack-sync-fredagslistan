@@ -19,7 +19,8 @@ jobs:
         uses: astral-sh/setup-uv@v5
 
       - name: Install dependencies
-        run: uv sync --dev
+        # --locked proves the committed uv.lock matches pyproject.toml (fails on drift)
+        run: uv sync --locked --dev
 
       - name: Ruff check
         run: uv run ruff check
