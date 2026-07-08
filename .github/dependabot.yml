@@ -43,6 +43,11 @@ updates:
       all-github-actions:
         patterns:
           - "*"  # Match all actions
+        # Group only minor + patch into the weekly PR; majors come individually
+        # so version bumps that may break CI wait for review (same policy as uv).
+        update-types:
+          - "minor"
+          - "patch"
     open-pull-requests-limit: 2
     commit-message:
       prefix: "ci"
