@@ -146,8 +146,6 @@ to the same value in your `.env`.
 
 This writes a local `.cache` file (gitignored — never commit it).
 
-![OAuth Flow](images/2024-02-09-14-39-03.png)
-
 ### How CI authenticates
 
 `get_spotify_client()` reads the `SPOTIPY_REFRESH_TOKEN` env var (set from a
