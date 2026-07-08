@@ -109,3 +109,71 @@ def test_found_syncs_but_does_not_announce(
     mock_announce.assert_not_called()
     mock_compare.assert_called_once()
     mock_add.assert_called_once()
+
+
+def _would_create_result():
+    return ResolutionResult(
+        action=PlaylistAction.WOULD_CREATE,
+        playlist=None,
+        playlist_id=None,
+        playlist_year=None,
+        search_failures=0,
+        failure_threshold=5,
+        was_created=False,
+        exit_code=0,
+    )
+
+
+@patch.dict("os.environ", {"DRY_RUN": "1"})
+@patch("main.write_github_output")
+@patch("main.add_songs_to_spotify_playlist")
+@patch("main.compare_lists_and_remove_duplicates")
+@patch("main.announce_new_playlist")
+@patch("main.resolve_yearly_playlist")
+def test_dry_run_would_create_skips_sync_and_announce_but_writes_output(
+    mock_resolve, mock_announce, mock_compare, mock_add, mock_write
+):
+    """DRY_RUN + WOULD_CREATE (playlist=None): no announce/compare/add, output still written."""
+    mock_resolve.return_value = _would_create_result()
+
+    main_module.main()
+
+    mock_resolve.assert_called_once()
+    assert mock_resolve.call_args.kwargs["dry_run"] is True
+    mock_announce.assert_not_called()
+    mock_compare.assert_not_called()
+    mock_add.assert_not_called()
+    mock_write.assert_called_once()
+
+
+@patch.dict("os.environ", {"DRY_RUN": "true"})
+@patch("main.write_github_output")
+@patch("main.add_songs_to_spotify_playlist")
+@patch("main.compare_lists_and_remove_duplicates")
+@patch("main.announce_new_playlist")
+@patch("main.resolve_yearly_playlist")
+def test_dry_run_found_reads_but_does_not_write(
+    mock_resolve, mock_announce, mock_compare, mock_add, mock_write
+):
+    """DRY_RUN with an existing (FOUND) playlist: compare runs (read-only), but
+    add_songs_to_spotify_playlist / announce (the write calls) are never invoked."""
+    found = ResolutionResult(
+        action=PlaylistAction.FOUND,
+        playlist={"id": "f1", "name": "Fredagslistan 2026 🎵", "url": "u"},
+        playlist_id="f1",
+        playlist_year=2026,
+        search_failures=0,
+        failure_threshold=5,
+        was_created=False,
+        exit_code=0,
+    )
+    mock_resolve.return_value = found
+    mock_compare.return_value = (["track1", "track2"], [])
+
+    main_module.main()
+
+    assert mock_resolve.call_args.kwargs["dry_run"] is True
+    mock_announce.assert_not_called()
+    mock_compare.assert_called_once()
+    mock_add.assert_not_called()
+    mock_write.assert_called_once()
