@@ -126,9 +126,13 @@ uv run pytest tests/test_slack_util.py  # Specific test file
 - [x] User attribution tracking (who shared what)
 - [ ] Handle albums and playlist links (not just tracks)
 
-## Spotify OAuth
+## Spotify auth & token rotation
 
-First-time setup requires manual OAuth authentication:
+Spotify uses user-scoped OAuth (needed to modify playlists). Locally you do an
+interactive OAuth once; CI (the Friday cron) authenticates non-interactively
+from a **refresh token** stored as a GitHub Actions secret.
+
+### First-time / local OAuth
 
 1. Run `uv run python main.py`
 2. A browser window opens for Spotify authorization
@@ -145,7 +149,54 @@ First-time setup requires manual OAuth authentication:
    slack-spotify-sync://callback/?code=AQD0EADQNOg...
    ```
 
+   This writes a local `.cache` file (gitignored — never commit it).
+
 ![OAuth Flow](images/2024-02-09-14-39-03.png)
+
+### How CI authenticates
+
+`get_spotify_client()` reads the `SPOTIPY_REFRESH_TOKEN` env var (set from a
+GitHub Actions secret). When present, spotipy is seeded with that refresh token
+**in memory** and mints a fresh access token on each run — no token file is
+needed. When absent, it falls back to the local `.cache` / interactive flow
+above (and, in CI with neither a token nor a `.cache`, fails fast with a clear
+error rather than hanging on an interactive prompt).
+
+> Migration note: a `.cache` file was historically committed to bootstrap CI.
+> Once the `SPOTIPY_REFRESH_TOKEN` secret is set and a manual run is verified
+> green, that committed cache is removed and purged from git history.
+
+### Rotating the Spotify token
+
+Do this to revoke a leaked/old token or on a schedule. It does **not** require
+downtime — set the new secret before revoking the old app authorization.
+
+1. **(Optional) new app credentials** — at
+   [developer.spotify.com/dashboard](https://developer.spotify.com/dashboard),
+   either rotate the client secret of the existing app or create a new app.
+   Update the `SPOTIPY_CLIENT_ID` / `SPOTIPY_CLIENT_SECRET` /
+   `SPOTIPY_REDIRECT_URI` repo secrets to match.
+2. **Mint a fresh refresh token locally**:
+
+   ```sh
+   rm -f .cache                 # discard any old cached token
+   uv run python main.py        # do the interactive OAuth (writes a new .cache)
+   # extract the refresh token from the new cache:
+   uv run python -c "import json; print(json.load(open('.cache'))['refresh_token'])"
+   ```
+
+3. **Store it as a secret**:
+
+   ```sh
+   gh secret set SPOTIPY_REFRESH_TOKEN   # paste the value from step 2
+   ```
+
+4. **Verify** without waiting for Friday: trigger the workflow manually
+   (`gh workflow run "Run main.py"` or the Actions tab → *Run workflow*) and
+   confirm it prints "Spotify token is valid." and completes green.
+5. **Revoke the old authorization** at
+   [spotify.com/account/apps](https://www.spotify.com/account/apps/) once the
+   new token is confirmed working. Any previously-committed token is now dead.
 
 ## Contributing
 
