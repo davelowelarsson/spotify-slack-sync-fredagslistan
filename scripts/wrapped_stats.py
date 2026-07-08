@@ -30,7 +30,7 @@ from utils.spotify_util import (
     get_playlist_stats,
 )
 
-CHANNEL_ID = os.getenv("SLACK_CHANNEL_ID", "CAB3JFSQN")
+CHANNEL_ID = os.getenv("SLACK_CHANNEL_ID") or "CAB3JFSQN"
 
 
 def year_stats(year: int) -> dict | None:

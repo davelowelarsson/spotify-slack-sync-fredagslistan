@@ -2,6 +2,10 @@
 .vscode/
 .idea/
 
+# Claude Code (local settings, worktrees, caches). Un-ignore specific paths
+# like .claude/commands/ if you ever want to share them with contributors.
+.claude/
+
 # Vagrant
 .vagrant/
 

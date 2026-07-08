@@ -21,7 +21,7 @@ from utils.spotify_util import (
 # Slack channel to sync, configurable via env. Defaults to the #fredagslistan
 # production channel; set SLACK_CHANNEL_ID to point elsewhere (e.g. a test
 # channel) without changing code.
-ACTIVE_CHANNEL_ID = os.getenv("SLACK_CHANNEL_ID", "CAB3JFSQN")
+ACTIVE_CHANNEL_ID = os.getenv("SLACK_CHANNEL_ID") or "CAB3JFSQN"
 
 
 def compare_lists_and_remove_duplicates(playlist_id: str) -> tuple[list[str], list[dict]]:
