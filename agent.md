@@ -40,7 +40,7 @@ Both Slack messages AND Spotify playlist tracks use a 6-day rolling window:
 │   ├── spotify_access_token.py # Spotify OAuth handling
 │   └── texts.py                # Dynamic text templates for announcements
 ├── tests/
-│   ├── test_slack_util.py      # Slack utility tests (109 tests total)
+│   ├── test_slack_util.py      # Slack utility tests
 │   ├── test_spotify_util.py    # Spotify utility tests
 │   └── test_texts.py           # Text template tests
 ├── .github/workflows/
