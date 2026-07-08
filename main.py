@@ -3,12 +3,13 @@
 
 from datetime import datetime
 
+from utils.playlist_state import read_state_from_env, write_github_output
 from utils.slack_util import announce_new_playlist, get_recent_slack_tracks, get_year_contributors
 from utils.spotify_util import (
     add_songs_to_spotify_playlist,
-    get_or_create_yearly_playlist,
     get_playlist,
     get_previous_year_stats,
+    resolve_yearly_playlist,
 )
 
 # Channel IDs
@@ -66,18 +67,40 @@ def compare_lists_and_remove_duplicates(playlist_id: str) -> tuple[list[str], li
 
 
 def main() -> None:
-    """Main entry point - sync Slack tracks to Spotify playlist."""
+    """Main entry point - sync Slack tracks to Spotify playlist.
+
+    Reads durable state from the environment, resolves the current-year
+    playlist without ever creating on uncertainty, runs the sync only when a
+    playlist was resolved, announces ONLY when a playlist was actually created,
+    then emits the new state to $GITHUB_OUTPUT. The process always exits 0 for
+    the counter path — a non-zero exit_code is EMITTED as output so the
+    workflow can persist the incremented counter before turning the build red.
+    """
     print(f"Starting Fredagslistan sync at {datetime.now().isoformat()}")
     print(f"Using channel: {ACTIVE_CHANNEL_ID}")
 
-    # Get or create the playlist for the current year
-    playlist, was_created = get_or_create_yearly_playlist()
+    # Resolve the playlist from durable state (never creates on uncertainty).
+    state = read_state_from_env()
+    result = resolve_yearly_playlist(state)
+
+    # UNCERTAIN / ABORTED: do nothing destructive. Emit state so the workflow
+    # can persist the incremented failure counter, then return cleanly.
+    if result.playlist is None:
+        print(
+            f"⚠️ No playlist resolved (action={result.action.value}). Skipping sync and announce."
+        )
+        write_github_output(result)
+        return
+
+    playlist = result.playlist
     playlist_id = playlist["id"]
 
-    print(f"Using playlist: {playlist['name']} ({playlist_id})")
+    print(f"Using playlist: {playlist['name']} ({playlist_id}) [action={result.action.value}]")
 
-    # If the playlist was just created, announce it in Slack
-    if was_created:
+    # Announce ONLY when a playlist was actually created. This is the coupling
+    # guarantee: a cache miss / search failure resolves to result.playlist=None
+    # above and never reaches this branch.
+    if result.was_created:
         print("New playlist created! Announcing in Slack...")
 
         # Get stats from last year's playlist for the announcement
@@ -123,6 +146,9 @@ def main() -> None:
     add_songs_to_spotify_playlist(playlist_id=playlist_id, track_ids=songs_to_add)
 
     print(f"\n✅ Sync complete. Added {len(songs_to_add)} tracks to {playlist['name']}")
+
+    # Emit the resolved state so the workflow can persist it (no-op locally).
+    write_github_output(result)
 
 
 if __name__ == "__main__":
