@@ -22,7 +22,8 @@ Both Slack messages AND Spotify playlist tracks use a 6-day rolling window:
 
 ## Tech Stack
 
-- **Python 3.8+** - Main programming language
+- **Python 3.13+** - Main programming language
+- **uv** - Toolchain: dependency management, virtualenv, and task running
 - **spotipy** - Spotify Web API wrapper
 - **slack_sdk** - Slack Web API client
 - **pytest** - Testing framework
@@ -44,7 +45,8 @@ Both Slack messages AND Spotify playlist tracks use a 6-day rolling window:
 │   └── test_texts.py           # Text template tests
 ├── .github/workflows/
 │   └── main.yml                # GitHub Actions workflow
-└── requirements.txt            # Python dependencies
+├── pyproject.toml              # Deps, ruff/pyright config (uv)
+└── uv.lock                     # Locked dependency versions
 ```
 
 ## Coding Standards
@@ -163,20 +165,20 @@ on:
 ### Running Tests
 
 ```bash
-pytest                    # Run all tests
-pytest -v                 # Verbose output
-pytest tests/test_slack_util.py  # Run specific test file
-pytest -k "test_name"     # Run tests matching pattern
+uv run pytest                    # Run all tests
+uv run pytest -v                 # Verbose output
+uv run pytest tests/test_slack_util.py  # Run specific test file
+uv run pytest -k "test_name"     # Run tests matching pattern
 ```
 
 ### Running Locally
 
 ```bash
-# Install dependencies
-pip install -r requirements.txt
+# Install dependencies (creates the venv, installs Python if needed)
+uv sync
 
 # Run the sync
-python main.py
+uv run python main.py
 ```
 
 ## Key Implementation Details
