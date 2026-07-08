@@ -6,38 +6,36 @@ the application for playlist names, descriptions, Slack topics, and announcement
 All templates support {year} and {url} placeholders where applicable.
 """
 
+import os
 import random
+import re
+
+from dotenv import load_dotenv
+
+# Load .env so PLAYLIST_NAME resolves even if this module is imported before
+# other modules call load_dotenv().
+load_dotenv()
 
 # =============================================================================
-# PLAYLIST NAME TEMPLATES
+# PLAYLIST NAME
 # =============================================================================
-# Format: Must contain "Fredagslistan" and {year} for identification
-# The year is used for matching, so it must be in a consistent position
+# The playlist name prefix, configurable via env so a fork can rebrand without
+# code changes. Used BOTH to name new playlists and to match existing ones by
+# year. Defaults to the original "Fredagslistan".
+# `or` (not a getenv default) so a set-but-empty PLAYLIST_NAME= falls back too.
+PLAYLIST_NAME = os.getenv("PLAYLIST_NAME") or "Fredagslistan"
 
-PLAYLIST_NAME_TEMPLATES = [
-    "Fredagslistan {year} 🎵",
-    "Fredagslistan {year} 🔥",
-    "Fredagslistan {year} ✨",
-    "Fredagslistan {year} 🚀",
-    "Fredagslistan {year} 🎸",
-    "Fredagslistan {year} 💃",
-    "Fredagslistan {year} 🎧",
-    "Fredagslistan {year} 🌟",
-    "Fredagslistan {year} 🎶",
-    "Fredagslistan {year} 🎤",
-]
+# Rotating name variants — each must contain PLAYLIST_NAME + {year} so playlists
+# stay identifiable by year. ({{year}} escapes to a literal {year} placeholder
+# that get_random_playlist_name fills in later.)
+_NAME_EMOJIS = ["🎵", "🔥", "✨", "🚀", "🎸", "💃", "🎧", "🌟", "🎶", "🎤"]
+PLAYLIST_NAME_TEMPLATES = [f"{PLAYLIST_NAME} {{year}} {emoji}" for emoji in _NAME_EMOJIS]
 
-# Pattern for matching playlist names
-# Matches "Fredagslistan 2025 🎵", "🎵 Fredagslistan 2026", " Fredagslistan 2025 ",
-# and the old format "Fredagslistan ! 2024-25 !".
-# First pattern: verify the name starts with Fredagslistan, tolerating any
-# leading non-word characters (emoji, spaces, punctuation). The `\W*` prefix
-# is deliberately NOT `.*`: a word character before "Fredagslistan" (e.g. "My
-# Fredagslistan clone" or "2026 Fredagslistan") must NOT match, so unrelated
-# playlists that merely mention the word stay invisible to the resolver. The
-# trailing `\b` (word boundary) prevents matching longer words like
-# "Fredagslistanish 2026" that merely start with the prefix.
-PLAYLIST_NAME_PREFIX_PATTERN = r"^\W*Fredagslistan\b"
+# Match pattern derived from PLAYLIST_NAME: tolerate leading emoji/space/
+# punctuation (\W*), but require a word boundary (\b) after the name so a word
+# char before it ("My <name> clone") or a longer word ("<name>ish") does NOT
+# match. re.escape keeps a custom name regex-safe.
+PLAYLIST_NAME_PREFIX_PATTERN = rf"^\W*{re.escape(PLAYLIST_NAME)}\b"
 # Second pattern: Find all 4-digit years or 2-digit year suffixes (e.g., "2024-25" -> 2024, 25)
 PLAYLIST_YEAR_PATTERN = r"(\d{4})(?:-(\d{2}))?"
 
