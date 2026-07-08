@@ -158,8 +158,13 @@ from a **refresh token** stored as a GitHub Actions secret.
 `get_spotify_client()` reads the `SPOTIPY_REFRESH_TOKEN` env var (set from a
 GitHub Actions secret). When present, spotipy is seeded with that refresh token
 **in memory** and mints a fresh access token on each run — no token file is
-committed or needed. When absent (local dev), it falls back to the interactive
-`.cache` flow above.
+needed. When absent, it falls back to the local `.cache` / interactive flow
+above (and, in CI with neither a token nor a `.cache`, fails fast with a clear
+error rather than hanging on an interactive prompt).
+
+> Migration note: a `.cache` file was historically committed to bootstrap CI.
+> Once the `SPOTIPY_REFRESH_TOKEN` secret is set and a manual run is verified
+> green, that committed cache is removed and purged from git history.
 
 ### Rotating the Spotify token
 

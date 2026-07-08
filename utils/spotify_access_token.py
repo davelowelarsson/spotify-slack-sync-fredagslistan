@@ -42,6 +42,16 @@ def _build_auth_manager(scope: str) -> SpotifyOAuth:
         )
         return SpotifyOAuth(scope=scope, cache_handler=cache_handler, open_browser=False)
 
+    # No refresh token in the environment. In CI there is no interactive OAuth,
+    # so if there is also no cached token file to fall back on, fail fast with a
+    # clear message instead of blocking on spotipy's stdin prompt (which would
+    # EOFError / hang the runner).
+    if os.getenv("CI") and not os.path.exists(".cache"):
+        raise RuntimeError(
+            "No Spotify credentials available in CI: set the SPOTIPY_REFRESH_TOKEN "
+            "secret (see the README 'Spotify auth & token rotation' section)."
+        )
+
     # Local development: spotipy's default .cache file / interactive OAuth.
     return SpotifyOAuth(scope=scope)
 
