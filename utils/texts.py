@@ -28,9 +28,14 @@ PLAYLIST_NAME_TEMPLATES = [
 ]
 
 # Pattern for matching playlist names
-# Matches both new format "Fredagslistan 2025 🎵" and old format "Fredagslistan ! 2024-25 !"
-# First pattern: Verify it starts with Fredagslistan
-PLAYLIST_NAME_PREFIX_PATTERN = r"^Fredagslistan\s*!?\s*"
+# Matches "Fredagslistan 2025 🎵", "🎵 Fredagslistan 2026", " Fredagslistan 2025 ",
+# and the old format "Fredagslistan ! 2024-25 !".
+# First pattern: verify the name starts with Fredagslistan, tolerating any
+# leading non-word characters (emoji, spaces, punctuation). The `\W*` prefix
+# is deliberately NOT `.*`: a word character before "Fredagslistan" (e.g. "My
+# Fredagslistan clone" or "2026 Fredagslistan") must NOT match, so unrelated
+# playlists that merely mention the word stay invisible to the resolver.
+PLAYLIST_NAME_PREFIX_PATTERN = r"^\W*Fredagslistan\s*!?\s*"
 # Second pattern: Find all 4-digit years or 2-digit year suffixes (e.g., "2024-25" -> 2024, 25)
 PLAYLIST_YEAR_PATTERN = r"(\d{4})(?:-(\d{2}))?"
 

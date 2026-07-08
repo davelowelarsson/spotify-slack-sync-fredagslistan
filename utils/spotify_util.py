@@ -1,9 +1,19 @@
 import re
+import time
 from collections import Counter
+from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
+from enum import Enum
 
 from spotipy import SpotifyException
 
+from utils.playlist_state import (
+    PlaylistAction,
+    PlaylistState,
+    ResolutionResult,
+    abort_result,
+    success_result,
+)
 from utils.spotify_access_token import get_spotify_client
 from utils.texts import (
     PLAYLIST_NAME_PREFIX_PATTERN,
@@ -11,6 +21,31 @@ from utils.texts import (
     get_random_playlist_description,
     get_random_playlist_name,
 )
+
+# Retry configuration for the hardened playlist enumeration.
+_SEARCH_MAX_ATTEMPTS = 3
+_SEARCH_BACKOFF_SECONDS = 0.5
+
+
+class SearchOutcome(Enum):
+    """Tri-state result of enumerating the user's playlists for a given year.
+
+    Only CONFIRMED_ABSENT (a fully successful enumeration with no name match)
+    ever authorises creating a new playlist. Any API error / incomplete
+    enumeration yields UNCERTAIN, which must never lead to a create.
+    """
+
+    FOUND = "FOUND"
+    CONFIRMED_ABSENT = "CONFIRMED_ABSENT"
+    UNCERTAIN = "UNCERTAIN"
+
+
+@dataclass(frozen=True)
+class SearchResult:
+    """Outcome of :func:`find_playlist_by_year` plus the matched candidate."""
+
+    outcome: SearchOutcome
+    candidate: dict | None = None
 
 
 def _require[T](value: T | None, what: str = "Spotify API response") -> T:
@@ -161,107 +196,118 @@ def extract_year_from_playlist_name(name: str) -> int | None:
     return None
 
 
+def _fetch_playlists_page(sp, limit: int, offset: int) -> dict | None:
+    """Fetch one page of the current user's playlists, with retry.
+
+    Returns the page dict on success, or None if every attempt failed. A None
+    here means the enumeration is incomplete and its result cannot be trusted.
+    """
+    last_exc: SpotifyException | None = None
+    for attempt in range(1, _SEARCH_MAX_ATTEMPTS + 1):
+        try:
+            return _require(sp.current_user_playlists(limit=limit, offset=offset))
+        except SpotifyException as exc:
+            last_exc = exc
+            print(
+                f"⚠️ Error fetching playlists (offset={offset}, "
+                f"attempt {attempt}/{_SEARCH_MAX_ATTEMPTS}): {exc}"
+            )
+            if attempt < _SEARCH_MAX_ATTEMPTS:
+                time.sleep(_SEARCH_BACKOFF_SECONDS)
+    print(f"❌ Giving up on playlists page at offset={offset}: {last_exc}")
+    return None
+
+
+def _select_candidate(candidates: list[dict], year: int, validate_with_tracks: bool) -> dict:
+    """Choose the best matching candidate among name matches.
+
+    This only runs once enumeration has fully succeeded and at least one name
+    matched, so it never affects the FOUND/ABSENT/UNCERTAIN decision.
+    """
+    if len(candidates) == 1:
+        candidate = candidates[0]
+        if validate_with_tracks:
+            latest_track_year = get_latest_track_year(candidate["id"])
+            if latest_track_year is not None and latest_track_year not in (year, year - 1):
+                print(
+                    f"⚠️ Warning: Playlist '{candidate['name']}' latest track from "
+                    f"{latest_track_year}, expected {year}"
+                )
+        return candidate
+
+    # Multiple candidates - prefer the one with tracks from the target year.
+    print(f"Found {len(candidates)} candidate playlists for {year}")
+    if validate_with_tracks:
+        for candidate in candidates:
+            if get_latest_track_year(candidate["id"]) == year:
+                print(f"✅ Selected '{candidate['name']}' (has tracks from {year})")
+                return candidate
+
+    print(f"Using first candidate: '{candidates[0]['name']}'")
+    return candidates[0]
+
+
 def find_playlist_by_year(
     year: int | None = None, validate_with_tracks: bool = True
-) -> dict | None:
+) -> SearchResult:
     """
-    Find a Fredagslistan playlist for a specific year.
+    Hardened search for a Fredagslistan playlist for a specific year.
 
-    Searches through the current user's playlists to find one matching
-    the naming convention 'Fredagslistan YYYY' (with any suffix).
+    Paginates through the current user's playlists (with retry per page) and
+    returns a tri-state result:
 
-    When validate_with_tracks is True, also checks the most recently added
-    track to validate the playlist is still active for the expected year.
-    This helps handle edge cases like "Fredagslistan 2024-25" where the
-    name suggests 2025 but if no tracks were added in 2025 yet, it means
-    the playlist is still effectively for 2024.
+    - FOUND: a playlist whose name matches 'Fredagslistan YYYY' was found.
+    - CONFIRMED_ABSENT: EVERY page was fetched successfully and none matched.
+    - UNCERTAIN: a page ultimately failed, so absence cannot be proven. This
+      must NEVER be treated as permission to create a new playlist.
 
     Args:
         year: The year to search for. Defaults to current year.
-        validate_with_tracks: If True, validate using latest track date.
+        validate_with_tracks: If True, use latest-track dates to disambiguate
+            between multiple name matches (informational only).
 
     Returns:
-        Playlist dict with id, name, url, and description, or None if not found
+        A :class:`SearchResult`.
     """
     if year is None:
         year = get_current_year()
 
     sp = get_spotify_client()
 
-    # Collect candidate playlists that match by name
-    candidates = []
-
-    # Paginate through all user playlists
+    candidates: list[dict] = []
     offset = 0
     limit = 50
 
     while True:
-        results = _require(sp.current_user_playlists(limit=limit, offset=offset))
+        results = _fetch_playlists_page(sp, limit, offset)
+        if results is None:
+            # A page ultimately failed: we cannot prove absence.
+            return SearchResult(outcome=SearchOutcome.UNCERTAIN)
+
         playlists = results.get("items", [])
-
-        if not playlists:
-            break
-
         for playlist in playlists:
-            # Check if this playlist matches the year using pattern matching
-            playlist_year = extract_year_from_playlist_name(playlist["name"])
-            if playlist_year == year:
+            if extract_year_from_playlist_name(playlist["name"]) == year:
                 candidates.append(
                     {
                         "id": playlist["id"],
                         "name": playlist["name"],
                         "url": playlist["external_urls"]["spotify"],
                         "description": playlist.get("description", ""),
+                        "track_count": playlist.get("tracks", {}).get("total"),
                     }
                 )
 
-        # Check if there are more playlists
-        if results.get("next") is None:
+        if not playlists or results.get("next") is None:
             break
 
         offset += limit
 
-    # No candidates found
+    # Enumeration completed successfully here.
     if not candidates:
-        return None
+        return SearchResult(outcome=SearchOutcome.CONFIRMED_ABSENT)
 
-    # If we only have one candidate, use it (with optional validation)
-    if len(candidates) == 1:
-        candidate = candidates[0]
-
-        if validate_with_tracks:
-            latest_track_year = get_latest_track_year(candidate["id"])
-            if latest_track_year is not None:
-                print(
-                    f"📅 Playlist '{candidate['name']}' - name suggests {year}, "
-                    f"latest track from {latest_track_year}"
-                )
-
-                # If the latest track is from the previous year and we're early in the new year,
-                # this is expected - the playlist is valid for the new year
-                if latest_track_year == year or latest_track_year == year - 1:
-                    return candidate
-                else:
-                    print(
-                        f"⚠️ Warning: Playlist may not match expected year "
-                        f"(expected {year}, got {latest_track_year})"
-                    )
-            else:
-                print(f"📅 Playlist '{candidate['name']}' is empty, assuming it's for {year}")
-
-        return candidate
-
-    # Multiple candidates - prefer the one with tracks from the target year
-    print(f"Found {len(candidates)} candidate playlists for {year}")
-    for candidate in candidates:
-        latest_track_year = get_latest_track_year(candidate["id"])
-        if latest_track_year == year:
-            print(f"✅ Selected '{candidate['name']}' (has tracks from {year})")
-            return candidate
-
-    # Fallback to first candidate if no perfect match
-    print(f"Using first candidate: '{candidates[0]['name']}'")
-    return candidates[0]
+    candidate = _select_candidate(candidates, year, validate_with_tracks)
+    return SearchResult(outcome=SearchOutcome.FOUND, candidate=candidate)
 
 
 def create_yearly_playlist(year: int | None = None) -> dict:
@@ -302,32 +348,98 @@ def create_yearly_playlist(year: int | None = None) -> dict:
     }
 
 
-def get_or_create_yearly_playlist(year: int | None = None) -> tuple[dict, bool]:
+def _verify_cached_playlist(playlist_id: str, year: int) -> dict | None:
+    """Verify a cached playlist id still exists, is accessible, and matches.
+
+    Returns a playlist dict (including ``track_count``) if usable, else None
+    (treated by the caller as a cache miss -> fall through to search).
     """
-    Get the playlist for a year, creating it if it doesn't exist.
+    sp = get_spotify_client()
+    try:
+        playlist = sp.playlist(playlist_id)
+    except SpotifyException as exc:
+        print(f"⚠️ Cached playlist {playlist_id} failed verification: {exc}")
+        return None
 
-    This is the main entry point for the lazy playlist creation pattern.
+    if playlist is None:
+        print(f"⚠️ Cached playlist {playlist_id} returned no data")
+        return None
 
-    Args:
-        year: The year for the playlist. Defaults to current year.
+    name = playlist.get("name", "")
+    if extract_year_from_playlist_name(name) != year:
+        print(f"⚠️ Cached playlist name '{name}' no longer matches {year}")
+        return None
 
-    Returns:
-        Tuple of (playlist_dict, was_created) where was_created is True
-        if the playlist was newly created, False if it already existed
+    return {
+        "id": playlist["id"],
+        "name": name,
+        "url": playlist["external_urls"]["spotify"],
+        "description": playlist.get("description", ""),
+        "track_count": playlist.get("tracks", {}).get("total"),
+    }
+
+
+def _warn_if_playlist_empty(playlist: dict) -> None:
+    """Non-destructive sanity check: warn (do not recreate) on 0 tracks.
+
+    Only meaningful for a playlist we resolved to an EXISTING one; a freshly
+    created playlist is expected to be empty and carries no ``track_count``.
+    """
+    count = playlist.get("track_count")
+    if count == 0:
+        print(
+            f"⚠️ Anomaly: resolved playlist '{playlist['name']}' "
+            f"({playlist['id']}) has 0 tracks — possible anomaly"
+        )
+
+
+def resolve_yearly_playlist(state: PlaylistState, year: int | None = None) -> ResolutionResult:
+    """Resolve the current-year playlist without ever creating on uncertainty.
+
+    Algorithm:
+      1. If the cached state is for the current year and its id verifies ->
+         USED_CACHED (reset failures).
+      2. Otherwise run the hardened search:
+         - FOUND -> use it.
+         - CONFIRMED_ABSENT -> create + (caller announces).
+         - UNCERTAIN -> ABORTED: keep prior state, bump failure counter,
+           never create.
+      3. For an existing resolved playlist, warn (only) if it has 0 tracks.
     """
     if year is None:
         year = get_current_year()
 
-    # Try to find existing playlist
-    existing = find_playlist_by_year(year)
-    if existing:
-        print(f"Found existing playlist: {existing['name']}")
-        return existing, False
+    # 1. Cached happy path: verify without enumerating.
+    if state.playlist_year == year and state.playlist_id:
+        verified = _verify_cached_playlist(state.playlist_id, year)
+        if verified is not None:
+            print(f"✅ Using cached playlist: {verified['name']} ({verified['id']})")
+            _warn_if_playlist_empty(verified)
+            return success_result(state, PlaylistAction.USED_CACHED, verified, year)
+        print("↩️ Cache miss — falling back to hardened search")
 
-    # Create new playlist
-    print(f"No playlist found for {year}, creating new one...")
-    new_playlist = create_yearly_playlist(year)
-    return new_playlist, True
+    # 2. Hardened search.
+    search = find_playlist_by_year(year)
+
+    if search.outcome is SearchOutcome.FOUND and search.candidate is not None:
+        candidate = search.candidate
+        print(f"✅ Found existing playlist via search: {candidate['name']} ({candidate['id']})")
+        _warn_if_playlist_empty(candidate)
+        return success_result(state, PlaylistAction.FOUND, candidate, year)
+
+    if search.outcome is SearchOutcome.CONFIRMED_ABSENT:
+        print(f"No playlist for {year} (confirmed absent) — creating a new one")
+        new_playlist = create_yearly_playlist(year)
+        return success_result(state, PlaylistAction.CREATED, new_playlist, year, was_created=True)
+
+    # UNCERTAIN: never create. Keep prior state, bump the failure counter.
+    result = abort_result(state)
+    print(
+        f"⚠️ Playlist search UNCERTAIN — aborting (no create/announce). "
+        f"failures={result.search_failures}/{result.failure_threshold}, "
+        f"exit_code={result.exit_code}"
+    )
+    return result
 
 
 def is_track_within_window(added_at: str, days_back: int = 6) -> bool:
@@ -503,11 +615,14 @@ def get_previous_year_stats(year: int | None = None) -> dict | None:
 
     previous_year = year - 1
 
-    # Find last year's playlist
-    previous_playlist = find_playlist_by_year(previous_year)
-    if not previous_playlist:
-        print(f"No playlist found for {previous_year}")
+    # Find last year's playlist (informational stats only — any non-FOUND
+    # outcome, including UNCERTAIN, simply yields no stats).
+    search = find_playlist_by_year(previous_year)
+    if search.outcome is not SearchOutcome.FOUND or search.candidate is None:
+        print(f"No playlist found for {previous_year} (outcome={search.outcome.value})")
         return None
+
+    previous_playlist = search.candidate
 
     print(f"Getting stats for {previous_year} playlist: {previous_playlist['name']}")
 
