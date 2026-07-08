@@ -402,7 +402,9 @@ def get_playlist(playlist_id: str, days_back: int = 6) -> list[dict]:
 
 
 # Add tracks to playlist using track id
-def add_songs_to_spotify_playlist(playlist_id: str, track_ids: list[str] | None = None) -> None:
+def add_songs_to_spotify_playlist(
+    playlist_id: str, track_ids: str | list[str] | None = None
+) -> None:
     sp = get_spotify_client()
 
     # make sure the incoming tracks is a list with strings
