@@ -352,7 +352,7 @@ def is_track_within_window(added_at: str, days_back: int = 6) -> bool:
     return track_datetime >= cutoff_start_of_day
 
 
-def get_playlist(playlist_id="1OdSuwMRWtpP0nVhLffEqe", days_back: int = 6):
+def get_playlist(playlist_id: str, days_back: int = 6) -> list[dict]:
     """
     Get tracks added to the Spotify playlist within the rolling window.
 
@@ -402,7 +402,7 @@ def get_playlist(playlist_id="1OdSuwMRWtpP0nVhLffEqe", days_back: int = 6):
 
 
 # Add tracks to playlist using track id
-def add_songs_to_spotify_playlist(playlist_id="1OdSuwMRWtpP0nVhLffEqe", track_ids=None):
+def add_songs_to_spotify_playlist(playlist_id: str, track_ids: list[str] | None = None) -> None:
     sp = get_spotify_client()
 
     # make sure the incoming tracks is a list with strings
