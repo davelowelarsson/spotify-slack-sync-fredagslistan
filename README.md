@@ -134,22 +134,17 @@ from a **refresh token** stored as a GitHub Actions secret.
 
 ### First-time / local OAuth
 
+Prerequisite: in the [Spotify app dashboard](https://developer.spotify.com/dashboard),
+register the redirect URI `http://127.0.0.1:8888/callback` (Spotify requires an
+explicit loopback IP — `localhost` is rejected) and set `SPOTIPY_REDIRECT_URI`
+to the same value in your `.env`.
+
 1. Run `uv run python main.py`
-2. A browser window opens for Spotify authorization
-3. After authorizing, copy the redirect URL
-4. Paste in terminal when prompted:
+2. A browser window opens for Spotify authorization — click **Agree**
+3. Spotify redirects to `http://127.0.0.1:8888/callback?code=…`, where spotipy's
+   local server captures the code automatically (no copy-paste needed)
 
-   ```text
-   Enter the URL you were redirected to:
-   ```
-
-   Example URL:
-
-   ```text
-   slack-spotify-sync://callback/?code=AQD0EADQNOg...
-   ```
-
-   This writes a local `.cache` file (gitignored — never commit it).
+This writes a local `.cache` file (gitignored — never commit it).
 
 ![OAuth Flow](images/2024-02-09-14-39-03.png)
 
