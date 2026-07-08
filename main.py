@@ -5,7 +5,12 @@ import os
 from datetime import datetime
 
 from utils.playlist_state import is_dry_run, read_state_from_env, write_github_output
-from utils.slack_util import announce_new_playlist, get_recent_slack_tracks, get_year_contributors
+from utils.slack_util import (
+    announce_new_playlist,
+    anonymize_name,
+    get_recent_slack_tracks,
+    get_year_contributors,
+)
 from utils.spotify_util import (
     add_songs_to_spotify_playlist,
     get_playlist,
@@ -60,7 +65,7 @@ def compare_lists_and_remove_duplicates(playlist_id: str) -> tuple[list[str], li
     # print the new list with user attribution
     print(f"\n📀 Songs to add: {len(songs_to_add)}")
     for song in songs_to_add_full:
-        print(f"  🎵 {song['track_id']} (shared by {song.get('user_name', 'Unknown')})")
+        print(f"  🎵 {song['track_id']} (shared by {anonymize_name(song.get('user_name', ''))})")
 
     return songs_to_add, songs_to_add_full
 
@@ -129,7 +134,8 @@ def main() -> None:
             )
             if top_contributors:
                 previous_year_stats["top_contributors"] = top_contributors
-                print(f"   - Top contributors: {[c['user_name'] for c in top_contributors]}")
+                masked = [anonymize_name(c["user_name"]) for c in top_contributors]
+                print(f"   - Top contributors: {masked}")
         else:
             print("No previous year playlist found for stats")
 
