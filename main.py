@@ -83,13 +83,17 @@ def main() -> None:
     state = read_state_from_env()
     result = resolve_yearly_playlist(state)
 
-    # UNCERTAIN / ABORTED: do nothing destructive. Emit state so the workflow
-    # can persist the incremented failure counter, then return cleanly.
+    # Emit state IMMEDIATELY — before any Spotify/Slack writes — so the resolved
+    # playlist id and failure counter survive even if a later network call
+    # crashes. Otherwise a just-created playlist would be forgotten and could be
+    # recreated (and re-announced) on the next run — the very incident this fixes.
+    write_github_output(result)
+
+    # UNCERTAIN / ABORTED: do nothing destructive, just return cleanly.
     if result.playlist is None:
         print(
             f"⚠️ No playlist resolved (action={result.action.value}). Skipping sync and announce."
         )
-        write_github_output(result)
         return
 
     playlist = result.playlist
@@ -146,9 +150,6 @@ def main() -> None:
     add_songs_to_spotify_playlist(playlist_id=playlist_id, track_ids=songs_to_add)
 
     print(f"\n✅ Sync complete. Added {len(songs_to_add)} tracks to {playlist['name']}")
-
-    # Emit the resolved state so the workflow can persist it (no-op locally).
-    write_github_output(result)
 
 
 if __name__ == "__main__":
