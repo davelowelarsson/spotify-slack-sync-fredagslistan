@@ -65,9 +65,3 @@ def get_spotify_client() -> spotipy.Spotify:
         _spotify_client = client
 
     return _spotify_client
-
-
-# Backward compatibility alias (deprecated)
-def get_spotify_access_token() -> spotipy.Spotify:
-    """Deprecated: Use get_spotify_client() instead."""
-    return get_spotify_client()
