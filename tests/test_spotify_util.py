@@ -1,20 +1,20 @@
-import pytest
-import re
-from unittest.mock import MagicMock, patch, ANY
+from unittest.mock import MagicMock, patch
+
+from freezegun import freeze_time
+
 from utils.spotify_util import (
     add_songs_to_spotify_playlist,
-    get_playlist,
-    is_track_within_window,
-    generate_playlist_name,
-    generate_playlist_description,
+    create_yearly_playlist,
     extract_year_from_playlist_name,
     find_playlist_by_year,
-    create_yearly_playlist,
-    get_or_create_yearly_playlist,
+    generate_playlist_description,
+    generate_playlist_name,
     get_current_year,
     get_latest_track_year,
+    get_or_create_yearly_playlist,
+    get_playlist,
+    is_track_within_window,
 )
-from freezegun import freeze_time
 
 
 # Unit tests for is_track_within_window
@@ -24,46 +24,46 @@ class TestIsTrackWithinWindow:
     @freeze_time("2022-01-07")  # Friday
     def test_track_from_today_is_included(self):
         """Track added today should be included."""
-        assert is_track_within_window('2022-01-07T12:00:00Z') is True
+        assert is_track_within_window("2022-01-07T12:00:00Z") is True
 
     @freeze_time("2022-01-07")  # Friday
     def test_track_from_yesterday_is_included(self):
         """Track added yesterday should be included."""
-        assert is_track_within_window('2022-01-06T12:00:00Z') is True
+        assert is_track_within_window("2022-01-06T12:00:00Z") is True
 
     @freeze_time("2022-01-07")  # Friday
     def test_track_from_6_days_ago_is_included(self):
         """Track added 6 days ago should be included (boundary)."""
-        assert is_track_within_window('2022-01-01T12:00:00Z') is True
+        assert is_track_within_window("2022-01-01T12:00:00Z") is True
 
     @freeze_time("2022-01-07")  # Friday
     def test_track_from_6_days_ago_at_midnight_is_included(self):
         """Track added exactly at midnight 6 days ago should be included (exact boundary)."""
-        assert is_track_within_window('2022-01-01T00:00:00Z') is True
+        assert is_track_within_window("2022-01-01T00:00:00Z") is True
 
     @freeze_time("2022-01-07")  # Friday
     def test_track_from_7_days_ago_is_excluded(self):
         """Track added 7 days ago should be excluded."""
-        assert is_track_within_window('2021-12-31T12:00:00Z') is False
+        assert is_track_within_window("2021-12-31T12:00:00Z") is False
 
     @freeze_time("2022-01-07")  # Friday
     def test_track_from_7_days_ago_at_2359_is_excluded(self):
         """Track added at 23:59 on day 7 (just before midnight) should be excluded."""
-        assert is_track_within_window('2021-12-31T23:59:59Z') is False
+        assert is_track_within_window("2021-12-31T23:59:59Z") is False
 
     @freeze_time("2022-01-07")  # Friday
     def test_track_from_2_months_ago_is_excluded(self):
         """Track added 2 months ago should be excluded (can come back!)."""
-        assert is_track_within_window('2021-11-07T12:00:00Z') is False
+        assert is_track_within_window("2021-11-07T12:00:00Z") is False
 
 
-@patch('utils.spotify_util.get_spotify_client')
+@patch("utils.spotify_util.get_spotify_client")
 def test_add_songs_to_spotify_playlist(mock_get_spotify_client):
     # Arrange
     mock_sp = MagicMock()
     mock_get_spotify_client.return_value = mock_sp
-    playlist_id = '1OdSuwMRWtpP0nVhLffEqe'
-    track_ids = ['track1', 'track2', 'track3']
+    playlist_id = "1OdSuwMRWtpP0nVhLffEqe"
+    track_ids = ["track1", "track2", "track3"]
 
     # Act
     add_songs_to_spotify_playlist(playlist_id, track_ids)
@@ -73,13 +73,13 @@ def test_add_songs_to_spotify_playlist(mock_get_spotify_client):
     mock_sp.playlist_add_items.assert_called_once_with(playlist_id, track_ids)
 
 
-@patch('utils.spotify_util.get_spotify_client')
+@patch("utils.spotify_util.get_spotify_client")
 def test_add_songs_to_spotify_playlist_single_track(mock_get_spotify_client):
     # Arrange
     mock_sp = MagicMock()
     mock_get_spotify_client.return_value = mock_sp
-    playlist_id = '1OdSuwMRWtpP0nVhLffEqe'
-    track_id = 'track1'
+    playlist_id = "1OdSuwMRWtpP0nVhLffEqe"
+    track_id = "track1"
 
     # Act
     add_songs_to_spotify_playlist(playlist_id, track_id)
@@ -91,29 +91,39 @@ def test_add_songs_to_spotify_playlist_single_track(mock_get_spotify_client):
 
 # Friday - tracks from 2022-01-01 onwards are within 6 days
 @freeze_time("2022-01-07")
-@patch('utils.spotify_util.get_spotify_client')
+@patch("utils.spotify_util.get_spotify_client")
 def test_get_playlist(mock_get_spotify_client):
     # Arrange
     mock_sp = MagicMock()
     mock_get_spotify_client.return_value = mock_sp
-    playlist_id = '1OdSuwMRWtpP0nVhLffEqe'
+    playlist_id = "1OdSuwMRWtpP0nVhLffEqe"
 
     # Mock the Spotify client - all tracks within the 6-day window
     mock_sp.playlist.return_value = {
-        'name': 'Playlist Name',
-        'description': 'Playlist Description',
-        'external_urls': {'spotify': 'Playlist URL'},
-        'tracks': {
-            'items': [{'added_at': '2022-01-07T00:00:00Z', 'track': {'name': 'Song 1', 'external_urls': {'spotify': 'url1'}, 'id': 'id1'}}],
-            'next': 'next_url'
-        }
+        "name": "Playlist Name",
+        "description": "Playlist Description",
+        "external_urls": {"spotify": "Playlist URL"},
+        "tracks": {
+            "items": [
+                {
+                    "added_at": "2022-01-07T00:00:00Z",
+                    "track": {"name": "Song 1", "external_urls": {"spotify": "url1"}, "id": "id1"},
+                }
+            ],
+            "next": "next_url",
+        },
     }
     mock_sp.next.side_effect = [
         {
-            'items': [{'added_at': '2022-01-06T00:00:00Z', 'track': {'name': 'Song 2', 'external_urls': {'spotify': 'url2'}, 'id': 'id2'}}],
-            'next': None
+            "items": [
+                {
+                    "added_at": "2022-01-06T00:00:00Z",
+                    "track": {"name": "Song 2", "external_urls": {"spotify": "url2"}, "id": "id2"},
+                }
+            ],
+            "next": None,
         },
-        None
+        None,
     ]
 
     # Act
@@ -126,29 +136,39 @@ def test_get_playlist(mock_get_spotify_client):
 
 
 @freeze_time("2022-01-07")  # Friday
-@patch('utils.spotify_util.get_spotify_client')
+@patch("utils.spotify_util.get_spotify_client")
 def test_get_playlist_with_mocked_results(mock_get_spotify_client):
     # Arrange
     mock_sp = MagicMock()
     mock_get_spotify_client.return_value = mock_sp
-    playlist_id = 'playlist_id'
+    playlist_id = "playlist_id"
 
     # Mock the Spotify client - both tracks within window
     mock_sp.playlist.return_value = {
-        'name': 'Playlist Name',
-        'description': 'Playlist Description',
-        'external_urls': {'spotify': 'Playlist URL'},
-        'tracks': {
-            'items': [{'added_at': '2022-01-07T00:00:00Z', 'track': {'name': 'Song 1', 'external_urls': {'spotify': 'url1'}, 'id': 'id1'}}],
-            'next': 'next_url'
-        }
+        "name": "Playlist Name",
+        "description": "Playlist Description",
+        "external_urls": {"spotify": "Playlist URL"},
+        "tracks": {
+            "items": [
+                {
+                    "added_at": "2022-01-07T00:00:00Z",
+                    "track": {"name": "Song 1", "external_urls": {"spotify": "url1"}, "id": "id1"},
+                }
+            ],
+            "next": "next_url",
+        },
     }
     mock_sp.next.side_effect = [
         {
-            'items': [{'added_at': '2022-01-06T00:00:00Z', 'track': {'name': 'Song 2', 'external_urls': {'spotify': 'url2'}, 'id': 'id2'}}],
-            'next': None
+            "items": [
+                {
+                    "added_at": "2022-01-06T00:00:00Z",
+                    "track": {"name": "Song 2", "external_urls": {"spotify": "url2"}, "id": "id2"},
+                }
+            ],
+            "next": None,
         },
-        None
+        None,
     ]
 
     # Act
@@ -158,44 +178,68 @@ def test_get_playlist_with_mocked_results(mock_get_spotify_client):
     mock_get_spotify_client.assert_called_once()
     mock_sp.playlist.assert_called_once_with(playlist_id)
     assert result == [
-        {'name': 'Song 1', 'url': 'url1', 'track_id': 'id1'},
-        {'name': 'Song 2', 'url': 'url2', 'track_id': 'id2'}
+        {"name": "Song 1", "url": "url1", "track_id": "id1"},
+        {"name": "Song 2", "url": "url2", "track_id": "id2"},
     ]
 
 
 @freeze_time("2022-01-07")  # Friday
-@patch('utils.spotify_util.get_spotify_client')
+@patch("utils.spotify_util.get_spotify_client")
 def test_get_playlist_filters_by_rolling_window(mock_get_spotify_client):
     """
     Test that get_playlist only returns tracks within the 6-day rolling window.
-    
+
     This allows songs that were added more than 6 days ago to "come back"
     if someone shares them again in Slack.
     """
     # Arrange
     mock_sp = MagicMock()
     mock_get_spotify_client.return_value = mock_sp
-    playlist_id = 'playlist_id'
+    playlist_id = "playlist_id"
 
     # Mock the Spotify client with tracks from different dates
     # Jan 7 = today, Jan 1 = 6 days ago (included), Dec 31 = 7 days ago (excluded)
     mock_sp.playlist.return_value = {
-        'name': 'Playlist Name',
-        'description': 'Playlist Description',
-        'external_urls': {'spotify': 'Playlist URL'},
-        'tracks': {
-            'items': [
-                {'added_at': '2022-01-07T12:00:00Z', 'track': {'name': 'Today Song',
-                                                               'external_urls': {'spotify': 'url1'}, 'id': 'id1'}},
-                {'added_at': '2022-01-01T12:00:00Z', 'track': {'name': '6 Days Ago Song',
-                                                               'external_urls': {'spotify': 'url2'}, 'id': 'id2'}},
-                {'added_at': '2021-12-31T12:00:00Z', 'track': {'name': '7 Days Ago Song',
-                                                               'external_urls': {'spotify': 'url3'}, 'id': 'id3'}},
-                {'added_at': '2021-11-07T12:00:00Z', 'track': {'name': '2 Months Ago Song',
-                                                               'external_urls': {'spotify': 'url4'}, 'id': 'id4'}}
+        "name": "Playlist Name",
+        "description": "Playlist Description",
+        "external_urls": {"spotify": "Playlist URL"},
+        "tracks": {
+            "items": [
+                {
+                    "added_at": "2022-01-07T12:00:00Z",
+                    "track": {
+                        "name": "Today Song",
+                        "external_urls": {"spotify": "url1"},
+                        "id": "id1",
+                    },
+                },
+                {
+                    "added_at": "2022-01-01T12:00:00Z",
+                    "track": {
+                        "name": "6 Days Ago Song",
+                        "external_urls": {"spotify": "url2"},
+                        "id": "id2",
+                    },
+                },
+                {
+                    "added_at": "2021-12-31T12:00:00Z",
+                    "track": {
+                        "name": "7 Days Ago Song",
+                        "external_urls": {"spotify": "url3"},
+                        "id": "id3",
+                    },
+                },
+                {
+                    "added_at": "2021-11-07T12:00:00Z",
+                    "track": {
+                        "name": "2 Months Ago Song",
+                        "external_urls": {"spotify": "url4"},
+                        "id": "id4",
+                    },
+                },
             ],
-            'next': None
-        }
+            "next": None,
+        },
     }
 
     # Act
@@ -205,11 +249,11 @@ def test_get_playlist_filters_by_rolling_window(mock_get_spotify_client):
     mock_get_spotify_client.assert_called_once()
     mock_sp.playlist.assert_called_once_with(playlist_id)
     assert len(result) == 2
-    track_ids = [t['track_id'] for t in result]
-    assert 'id1' in track_ids  # Today
-    assert 'id2' in track_ids  # 6 days ago
-    assert 'id3' not in track_ids  # 7 days ago - excluded
-    assert 'id4' not in track_ids  # 2 months ago - excluded (can come back!)
+    track_ids = [t["track_id"] for t in result]
+    assert "id1" in track_ids  # Today
+    assert "id2" in track_ids  # 6 days ago
+    assert "id3" not in track_ids  # 7 days ago - excluded
+    assert "id4" not in track_ids  # 2 months ago - excluded (can come back!)
 
 
 # Tests for yearly playlist management functions
@@ -227,8 +271,8 @@ class TestPlaylistNaming:
         name = generate_playlist_name()
         # Should extract year correctly and contain 2025
         assert extract_year_from_playlist_name(name) == 2025
-        assert '2025' in name
-        assert 'Fredagslistan' in name
+        assert "2025" in name
+        assert "Fredagslistan" in name
 
     def test_generate_playlist_name_specific_year(self):
         """Test playlist name generation with specific year."""
@@ -237,21 +281,21 @@ class TestPlaylistNaming:
 
         # Both should extract correctly and contain their respective years
         assert extract_year_from_playlist_name(name_2024) == 2024
-        assert '2024' in name_2024
+        assert "2024" in name_2024
         assert extract_year_from_playlist_name(name_2023) == 2023
-        assert '2023' in name_2023
+        assert "2023" in name_2023
 
     @freeze_time("2025-12-07")
     def test_generate_playlist_description_default_year(self):
         """Test playlist description generation with default year."""
         description = generate_playlist_description()
         # Should contain the year
-        assert '2025' in description
+        assert "2025" in description
 
     def test_generate_playlist_description_specific_year(self):
         """Test playlist description generation with specific year."""
         desc_2024 = generate_playlist_description(2024)
-        assert '2024' in desc_2024
+        assert "2024" in desc_2024
 
     def test_extract_year_from_playlist_name_valid(self):
         """Test extracting year from valid playlist names."""
@@ -278,199 +322,191 @@ class TestPlaylistNaming:
 
     def test_extract_year_from_old_format(self):
         """Test extracting year from old naming convention with exclamation marks.
-        
+
         Multi-year formats like "2024-25" extract the LATEST year (2025).
         """
         # Old format: "Fredagslistan ! 2024-25 !" -> extracts 2025 (the latest year)
-        assert extract_year_from_playlist_name(
-            "Fredagslistan ! 2024-25 !") == 2025
-        assert extract_year_from_playlist_name(
-            "Fredagslistan! 2023-24!") == 2024
+        assert extract_year_from_playlist_name("Fredagslistan ! 2024-25 !") == 2025
+        assert extract_year_from_playlist_name("Fredagslistan! 2023-24!") == 2024
         # Single year format still works
-        assert extract_year_from_playlist_name(
-            "Fredagslistan ! 2022 !") == 2022
+        assert extract_year_from_playlist_name("Fredagslistan ! 2022 !") == 2022
 
     def test_extract_year_from_multi_year_format(self):
         """Test extracting year from multi-year formats."""
         # "YYYY-YY" format extracts the latest year
         assert extract_year_from_playlist_name("Fredagslistan 2024-25") == 2025
         assert extract_year_from_playlist_name("Fredagslistan 2019-20") == 2020
-        assert extract_year_from_playlist_name(
-            "Fredagslistan 1999-00") == 2000  # Century rollover
+        assert extract_year_from_playlist_name("Fredagslistan 1999-00") == 2000  # Century rollover
 
 
 class TestGetLatestTrackYear:
     """Tests for get_latest_track_year function."""
 
-    @patch('utils.spotify_util.get_spotify_client')
+    @patch("utils.spotify_util.get_spotify_client")
     def test_returns_year_from_latest_track(self, mock_get_spotify_client):
         """Test extracting year from the most recently added track."""
         mock_sp = MagicMock()
         mock_get_spotify_client.return_value = mock_sp
 
         # First call: get total count
-        mock_sp.playlist.return_value = {'tracks': {'total': 100}}
+        mock_sp.playlist.return_value = {"tracks": {"total": 100}}
 
         # Second call: get last 3 tracks
         mock_sp.playlist_tracks.return_value = {
-            'items': [
-                {'added_at': '2024-12-20T10:00:00Z'},
-                {'added_at': '2024-12-25T10:00:00Z'},
-                {'added_at': '2025-01-05T10:00:00Z'},  # Latest
+            "items": [
+                {"added_at": "2024-12-20T10:00:00Z"},
+                {"added_at": "2024-12-25T10:00:00Z"},
+                {"added_at": "2025-01-05T10:00:00Z"},  # Latest
             ]
         }
 
-        result = get_latest_track_year('playlist123')
+        result = get_latest_track_year("playlist123")
         assert result == 2025
         mock_sp.playlist_tracks.assert_called_once_with(
-            'playlist123',
-            fields='items(added_at)',
+            "playlist123",
+            fields="items(added_at)",
             limit=3,
-            offset=97  # 100 - 3
+            offset=97,  # 100 - 3
         )
 
-    @patch('utils.spotify_util.get_spotify_client')
+    @patch("utils.spotify_util.get_spotify_client")
     def test_returns_none_for_empty_playlist(self, mock_get_spotify_client):
         """Test returns None for playlist with no tracks."""
         mock_sp = MagicMock()
         mock_get_spotify_client.return_value = mock_sp
 
-        mock_sp.playlist.return_value = {'tracks': {'total': 0}}
+        mock_sp.playlist.return_value = {"tracks": {"total": 0}}
 
-        result = get_latest_track_year('playlist123')
+        result = get_latest_track_year("playlist123")
         assert result is None
         mock_sp.playlist_tracks.assert_not_called()
 
-    @patch('utils.spotify_util.get_spotify_client')
+    @patch("utils.spotify_util.get_spotify_client")
     def test_handles_single_track(self, mock_get_spotify_client):
         """Test with a single track in the playlist."""
         mock_sp = MagicMock()
         mock_get_spotify_client.return_value = mock_sp
 
-        mock_sp.playlist.return_value = {'tracks': {'total': 1}}
-        mock_sp.playlist_tracks.return_value = {
-            'items': [{'added_at': '2025-12-01T10:00:00Z'}]
-        }
+        mock_sp.playlist.return_value = {"tracks": {"total": 1}}
+        mock_sp.playlist_tracks.return_value = {"items": [{"added_at": "2025-12-01T10:00:00Z"}]}
 
-        result = get_latest_track_year('playlist123')
+        result = get_latest_track_year("playlist123")
         assert result == 2025
         mock_sp.playlist_tracks.assert_called_once_with(
-            'playlist123',
-            fields='items(added_at)',
+            "playlist123",
+            fields="items(added_at)",
             limit=3,
-            offset=0  # max(0, 1-3) = 0
+            offset=0,  # max(0, 1-3) = 0
         )
 
-    @patch('utils.spotify_util.get_spotify_client')
+    @patch("utils.spotify_util.get_spotify_client")
     def test_handles_large_playlist_efficiently(self, mock_get_spotify_client):
         """Test that a 1200-track playlist only fetches the last 3 tracks."""
         mock_sp = MagicMock()
         mock_get_spotify_client.return_value = mock_sp
 
-        mock_sp.playlist.return_value = {'tracks': {'total': 1200}}
+        mock_sp.playlist.return_value = {"tracks": {"total": 1200}}
         mock_sp.playlist_tracks.return_value = {
-            'items': [
-                {'added_at': '2025-12-05T10:00:00Z'},
-                {'added_at': '2025-12-06T10:00:00Z'},
-                {'added_at': '2025-12-07T10:00:00Z'},  # Latest
+            "items": [
+                {"added_at": "2025-12-05T10:00:00Z"},
+                {"added_at": "2025-12-06T10:00:00Z"},
+                {"added_at": "2025-12-07T10:00:00Z"},  # Latest
             ]
         }
 
-        result = get_latest_track_year('playlist123')
+        result = get_latest_track_year("playlist123")
         assert result == 2025
         mock_sp.playlist_tracks.assert_called_once_with(
-            'playlist123',
-            fields='items(added_at)',
+            "playlist123",
+            fields="items(added_at)",
             limit=3,
-            offset=1197  # 1200 - 3
+            offset=1197,  # 1200 - 3
         )
 
 
 @freeze_time("2025-12-07")
-@patch('utils.spotify_util.get_spotify_client')
+@patch("utils.spotify_util.get_spotify_client")
 def test_find_playlist_by_year_found(mock_get_spotify_client):
     """Test finding an existing playlist by year."""
     mock_sp = MagicMock()
     mock_get_spotify_client.return_value = mock_sp
 
     mock_sp.current_user_playlists.return_value = {
-        'items': [
+        "items": [
             {
-                'id': 'playlist123',
-                'name': 'Fredagslistan 2025 🎵',
-                'external_urls': {'spotify': 'https://open.spotify.com/playlist/playlist123'},
-                'description': 'UR pepp 2025 🔥'
+                "id": "playlist123",
+                "name": "Fredagslistan 2025 🎵",
+                "external_urls": {"spotify": "https://open.spotify.com/playlist/playlist123"},
+                "description": "UR pepp 2025 🔥",
             },
             {
-                'id': 'other_playlist',
-                'name': 'Other Playlist',
-                'external_urls': {'spotify': 'https://open.spotify.com/playlist/other'},
-                'description': 'Some other playlist'
-            }
+                "id": "other_playlist",
+                "name": "Other Playlist",
+                "external_urls": {"spotify": "https://open.spotify.com/playlist/other"},
+                "description": "Some other playlist",
+            },
         ],
-        'next': None
+        "next": None,
     }
 
     # Mock playlist calls for track validation (two-step: get total, then get last tracks)
-    mock_sp.playlist.return_value = {'tracks': {'total': 50}}
-    mock_sp.playlist_tracks.return_value = {
-        'items': [{'added_at': '2025-12-01T10:00:00Z'}]
-    }
+    mock_sp.playlist.return_value = {"tracks": {"total": 50}}
+    mock_sp.playlist_tracks.return_value = {"items": [{"added_at": "2025-12-01T10:00:00Z"}]}
 
     result = find_playlist_by_year(2025)
 
     assert result is not None
-    assert result['id'] == 'playlist123'
-    assert 'Fredagslistan' in result['name']
-    assert '2025' in result['name']
-    assert 'playlist123' in result['url']
+    assert result["id"] == "playlist123"
+    assert "Fredagslistan" in result["name"]
+    assert "2025" in result["name"]
+    assert "playlist123" in result["url"]
 
 
 @freeze_time("2025-12-07")
-@patch('utils.spotify_util.get_spotify_client')
+@patch("utils.spotify_util.get_spotify_client")
 def test_find_playlist_by_year_found_without_validation(mock_get_spotify_client):
     """Test finding an existing playlist by year without track validation."""
     mock_sp = MagicMock()
     mock_get_spotify_client.return_value = mock_sp
 
     mock_sp.current_user_playlists.return_value = {
-        'items': [
+        "items": [
             {
-                'id': 'playlist123',
-                'name': 'Fredagslistan 2025 🎵',
-                'external_urls': {'spotify': 'https://open.spotify.com/playlist/playlist123'},
-                'description': 'UR pepp 2025 🔥'
+                "id": "playlist123",
+                "name": "Fredagslistan 2025 🎵",
+                "external_urls": {"spotify": "https://open.spotify.com/playlist/playlist123"},
+                "description": "UR pepp 2025 🔥",
             }
         ],
-        'next': None
+        "next": None,
     }
 
     # Don't need to mock playlist call when validation is disabled
     result = find_playlist_by_year(2025, validate_with_tracks=False)
 
     assert result is not None
-    assert result['id'] == 'playlist123'
+    assert result["id"] == "playlist123"
     # playlist() should not have been called
     mock_sp.playlist.assert_not_called()
 
 
 @freeze_time("2025-12-07")
-@patch('utils.spotify_util.get_spotify_client')
+@patch("utils.spotify_util.get_spotify_client")
 def test_find_playlist_by_year_not_found(mock_get_spotify_client):
     """Test finding a playlist when it doesn't exist."""
     mock_sp = MagicMock()
     mock_get_spotify_client.return_value = mock_sp
 
     mock_sp.current_user_playlists.return_value = {
-        'items': [
+        "items": [
             {
-                'id': 'old_playlist',
-                'name': 'Fredagslistan 2024 🎵',
-                'external_urls': {'spotify': 'https://open.spotify.com/playlist/old'},
-                'description': 'UR pepp 2024 🔥'
+                "id": "old_playlist",
+                "name": "Fredagslistan 2024 🎵",
+                "external_urls": {"spotify": "https://open.spotify.com/playlist/old"},
+                "description": "UR pepp 2024 🔥",
             }
         ],
-        'next': None
+        "next": None,
     }
 
     result = find_playlist_by_year(2025)
@@ -479,7 +515,7 @@ def test_find_playlist_by_year_not_found(mock_get_spotify_client):
 
 
 @freeze_time("2025-12-07")
-@patch('utils.spotify_util.get_spotify_client')
+@patch("utils.spotify_util.get_spotify_client")
 def test_find_playlist_by_year_pagination(mock_get_spotify_client):
     """Test finding a playlist across multiple pages."""
     mock_sp = MagicMock()
@@ -488,44 +524,53 @@ def test_find_playlist_by_year_pagination(mock_get_spotify_client):
     # First page doesn't have the playlist
     mock_sp.current_user_playlists.side_effect = [
         {
-            'items': [{'id': 'p1', 'name': 'Other 1', 'external_urls': {'spotify': 'url1'}, 'description': ''}],
-            'next': 'next_url'
+            "items": [
+                {
+                    "id": "p1",
+                    "name": "Other 1",
+                    "external_urls": {"spotify": "url1"},
+                    "description": "",
+                }
+            ],
+            "next": "next_url",
         },
         {
-            'items': [
-                {'id': 'target', 'name': 'Fredagslistan 2025 🔥', 'external_urls': {
-                    'spotify': 'url2'}, 'description': 'Fredagsmusik 2025 🎵'}
+            "items": [
+                {
+                    "id": "target",
+                    "name": "Fredagslistan 2025 🔥",
+                    "external_urls": {"spotify": "url2"},
+                    "description": "Fredagsmusik 2025 🎵",
+                }
             ],
-            'next': None
-        }
+            "next": None,
+        },
     ]
 
     # Mock playlist calls for track validation (two-step: get total, then get last tracks)
-    mock_sp.playlist.return_value = {'tracks': {'total': 50}}
-    mock_sp.playlist_tracks.return_value = {
-        'items': [{'added_at': '2025-12-01T10:00:00Z'}]
-    }
+    mock_sp.playlist.return_value = {"tracks": {"total": 50}}
+    mock_sp.playlist_tracks.return_value = {"items": [{"added_at": "2025-12-01T10:00:00Z"}]}
 
     result = find_playlist_by_year(2025)
 
     assert result is not None
-    assert result['id'] == 'target'
+    assert result["id"] == "target"
     # Should have been called twice for pagination
     assert mock_sp.current_user_playlists.call_count == 2
 
 
 @freeze_time("2025-12-07")
-@patch('utils.spotify_util.get_spotify_client')
+@patch("utils.spotify_util.get_spotify_client")
 def test_create_yearly_playlist(mock_get_spotify_client):
     """Test creating a new yearly playlist."""
     mock_sp = MagicMock()
     mock_get_spotify_client.return_value = mock_sp
 
-    mock_sp.current_user.return_value = {'id': 'user123'}
+    mock_sp.current_user.return_value = {"id": "user123"}
     mock_sp.user_playlist_create.return_value = {
-        'id': 'new_playlist_id',
-        'name': 'Fredagslistan 2025 🎵',
-        'external_urls': {'spotify': 'https://open.spotify.com/playlist/new_playlist_id'}
+        "id": "new_playlist_id",
+        "name": "Fredagslistan 2025 🎵",
+        "external_urls": {"spotify": "https://open.spotify.com/playlist/new_playlist_id"},
     }
 
     result = create_yearly_playlist(2025)
@@ -533,71 +578,66 @@ def test_create_yearly_playlist(mock_get_spotify_client):
     # Verify the call was made with correct structure (name and description are dynamic)
     mock_sp.user_playlist_create.assert_called_once()
     call_kwargs = mock_sp.user_playlist_create.call_args[1]
-    assert call_kwargs['user'] == 'user123'
-    assert 'Fredagslistan' in call_kwargs['name']
-    assert '2025' in call_kwargs['name']
-    assert '2025' in call_kwargs['description']
-    assert call_kwargs['public'] is True
-    assert call_kwargs['collaborative'] is False
+    assert call_kwargs["user"] == "user123"
+    assert "Fredagslistan" in call_kwargs["name"]
+    assert "2025" in call_kwargs["name"]
+    assert "2025" in call_kwargs["description"]
+    assert call_kwargs["public"] is True
+    assert call_kwargs["collaborative"] is False
 
-    assert result['id'] == 'new_playlist_id'
+    assert result["id"] == "new_playlist_id"
 
 
 @freeze_time("2025-12-07")
-@patch('utils.spotify_util.get_spotify_client')
+@patch("utils.spotify_util.get_spotify_client")
 def test_get_or_create_yearly_playlist_existing(mock_get_spotify_client):
     """Test get_or_create when playlist exists."""
     mock_sp = MagicMock()
     mock_get_spotify_client.return_value = mock_sp
 
     mock_sp.current_user_playlists.return_value = {
-        'items': [
+        "items": [
             {
-                'id': 'existing_id',
-                'name': 'Fredagslistan 2025 🎧',
-                'external_urls': {'spotify': 'https://open.spotify.com/playlist/existing_id'},
-                'description': 'Fredagsmusik 2025 🔥'
+                "id": "existing_id",
+                "name": "Fredagslistan 2025 🎧",
+                "external_urls": {"spotify": "https://open.spotify.com/playlist/existing_id"},
+                "description": "Fredagsmusik 2025 🔥",
             }
         ],
-        'next': None
+        "next": None,
     }
 
     # Mock playlist calls for track validation (two-step: get total, then get last tracks)
-    mock_sp.playlist.return_value = {'tracks': {'total': 50}}
-    mock_sp.playlist_tracks.return_value = {
-        'items': [{'added_at': '2025-12-01T10:00:00Z'}]
-    }
+    mock_sp.playlist.return_value = {"tracks": {"total": 50}}
+    mock_sp.playlist_tracks.return_value = {"items": [{"added_at": "2025-12-01T10:00:00Z"}]}
 
     result, was_created = get_or_create_yearly_playlist(2025)
 
     assert was_created is False
-    assert result['id'] == 'existing_id'
+    assert result["id"] == "existing_id"
     # user_playlist_create should NOT have been called
     mock_sp.user_playlist_create.assert_not_called()
 
 
 @freeze_time("2025-12-07")
-@patch('utils.spotify_util.get_spotify_client')
+@patch("utils.spotify_util.get_spotify_client")
 def test_get_or_create_yearly_playlist_new(mock_get_spotify_client):
     """Test get_or_create when playlist doesn't exist."""
     mock_sp = MagicMock()
     mock_get_spotify_client.return_value = mock_sp
 
     # No matching playlist found
-    mock_sp.current_user_playlists.return_value = {
-        'items': [],
-        'next': None
-    }
+    mock_sp.current_user_playlists.return_value = {"items": [], "next": None}
 
-    mock_sp.current_user.return_value = {'id': 'user123'}
+    mock_sp.current_user.return_value = {"id": "user123"}
     mock_sp.user_playlist_create.return_value = {
-        'id': 'new_playlist_id',
-        'name': 'Fredagslistan 2025 ✨',
-        'external_urls': {'spotify': 'https://open.spotify.com/playlist/new_playlist_id'}
+        "id": "new_playlist_id",
+        "name": "Fredagslistan 2025 ✨",
+        "external_urls": {"spotify": "https://open.spotify.com/playlist/new_playlist_id"},
     }
 
     result, was_created = get_or_create_yearly_playlist(2025)
 
     assert was_created is True
-    assert result['id'] == 'new_playlist_id'
+    assert result["id"] == "new_playlist_id"
     mock_sp.user_playlist_create.assert_called_once()
