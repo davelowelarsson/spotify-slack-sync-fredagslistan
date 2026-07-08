@@ -33,9 +33,54 @@ jobs:
       # Secrets are scoped to this step only (least privilege) — earlier steps
       # (checkout, uv install, tests) never receive them.
       - name: Run main.py
+        id: sync
         env:
           SLACK_API_TOKEN: ${{ secrets.SLACK_API_TOKEN }}
           SPOTIPY_CLIENT_ID: ${{ secrets.SPOTIPY_CLIENT_ID }}
           SPOTIPY_CLIENT_SECRET: ${{ secrets.SPOTIPY_CLIENT_SECRET }}
           SPOTIPY_REDIRECT_URI: ${{ secrets.SPOTIPY_REDIRECT_URI }}
+          # Durable per-year state, read from repo variables. Any of these may
+          # be empty (e.g. before the first persisted run) — the app tolerates
+          # absent/blank values. main.py NEVER calls the GitHub API; it only
+          # reads these env vars and emits new values as step outputs below.
+          FREDAGSLISTAN_PLAYLIST_ID: ${{ vars.FREDAGSLISTAN_PLAYLIST_ID }}
+          FREDAGSLISTAN_PLAYLIST_YEAR: ${{ vars.FREDAGSLISTAN_PLAYLIST_YEAR }}
+          FREDAGSLISTAN_SEARCH_FAILURES: ${{ vars.FREDAGSLISTAN_SEARCH_FAILURES }}
+          FREDAGSLISTAN_FAILURE_THRESHOLD: ${{ vars.FREDAGSLISTAN_FAILURE_THRESHOLD }}
         run: uv run python main.py
+
+      # Persist the computed durable state back into repo variables so the next
+      # run remembers the resolved playlist AND the failure counter. This runs
+      # whenever main.py emitted outputs (including on a safe ABORT), because
+      # the incremented counter MUST survive to the next run — that is why
+      # main.py always exits 0 and the build is only failed in a LATER step.
+      #
+      # `always()` is critical: main.py emits its outputs BEFORE the announce/
+      # sync network calls, so even if one of those crashes the Run step, the
+      # resolved (possibly just-created) playlist id has already been written
+      # and MUST still be persisted here — otherwise the next run forgets it and
+      # could recreate + re-announce the playlist.
+      #
+      # Requires a fine-grained PAT `GH_STATE_TOKEN` (single-repo,
+      # Variables: read/write) provisioned by the repo owner. Without it this
+      # step errors, but `continue-on-error` keeps the job green: the sync
+      # still runs, it just won't remember state between runs.
+      - name: Persist playlist state
+        if: ${{ always() && steps.sync.outputs.action != '' }}
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ secrets.GH_STATE_TOKEN }}
+        run: |
+          gh variable set FREDAGSLISTAN_PLAYLIST_ID --body "${{ steps.sync.outputs.playlist_id }}"
+          gh variable set FREDAGSLISTAN_PLAYLIST_YEAR --body "${{ steps.sync.outputs.playlist_year }}"
+          gh variable set FREDAGSLISTAN_SEARCH_FAILURES --body "${{ steps.sync.outputs.search_failures }}"
+
+      # Turn the build red (→ notification email) ONLY after state was
+      # persisted, based on the emitted exit_code (e.g. failure counter reached
+      # the threshold). Keeping this separate is what lets the counter survive.
+      - name: Fail job if sync reported a non-zero exit code
+        if: ${{ steps.sync.outputs.exit_code != '0' }}
+        run: |
+          echo "Sync reported exit_code=${{ steps.sync.outputs.exit_code }}"
+          echo "Search failures reached the configured threshold — failing the build."
+          exit 1
