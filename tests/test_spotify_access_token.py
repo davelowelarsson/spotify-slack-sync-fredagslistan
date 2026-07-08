@@ -1,6 +1,8 @@
 import os
 from unittest.mock import patch
 
+import pytest
+
 from utils.spotify_access_token import _build_auth_manager
 
 
@@ -34,3 +36,19 @@ def test_build_auth_manager_falls_back_to_default_without_token(mock_cache, mock
 
     mock_cache.assert_not_called()
     mock_oauth.assert_called_once_with(scope="scope-y")
+
+
+@patch("utils.spotify_access_token.SpotifyOAuth")
+@patch("utils.spotify_access_token.MemoryCacheHandler")
+def test_build_auth_manager_ci_without_token_or_cache_fails_fast(mock_cache, mock_oauth):
+    """In CI with neither a refresh token nor a .cache file, raise a clear error
+    instead of falling through to an interactive prompt that would hang."""
+    with (
+        patch.dict(os.environ, {"CI": "true"}, clear=True),
+        patch("utils.spotify_access_token.os.path.exists", return_value=False),
+        pytest.raises(RuntimeError, match="SPOTIPY_REFRESH_TOKEN"),
+    ):
+        _build_auth_manager("scope-z")
+
+    mock_cache.assert_not_called()
+    mock_oauth.assert_not_called()
