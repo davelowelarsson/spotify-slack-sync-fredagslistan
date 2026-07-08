@@ -8,7 +8,6 @@ All templates support {year} and {url} placeholders where applicable.
 
 import random
 
-
 # =============================================================================
 # PLAYLIST NAME TEMPLATES
 # =============================================================================
@@ -31,9 +30,9 @@ PLAYLIST_NAME_TEMPLATES = [
 # Pattern for matching playlist names
 # Matches both new format "Fredagslistan 2025 🎵" and old format "Fredagslistan ! 2024-25 !"
 # First pattern: Verify it starts with Fredagslistan
-PLAYLIST_NAME_PREFIX_PATTERN = r'^Fredagslistan\s*!?\s*'
+PLAYLIST_NAME_PREFIX_PATTERN = r"^Fredagslistan\s*!?\s*"
 # Second pattern: Find all 4-digit years or 2-digit year suffixes (e.g., "2024-25" -> 2024, 25)
-PLAYLIST_YEAR_PATTERN = r'(\d{4})(?:-(\d{2}))?'
+PLAYLIST_YEAR_PATTERN = r"(\d{4})(?:-(\d{2}))?"
 
 
 # =============================================================================
@@ -134,6 +133,7 @@ STATS_INTRO_TEMPLATES = [
 # HELPER FUNCTIONS
 # =============================================================================
 
+
 def get_random_playlist_name(year: int) -> str:
     """Get a random playlist name with the year filled in."""
     template = random.choice(PLAYLIST_NAME_TEMPLATES)
@@ -175,27 +175,27 @@ def get_random_stats_intro(playlist_name: str, track_count: int) -> str:
 # Used by format_top_genres to add appropriate emojis
 
 GENRE_EMOJI_MAP = {
-    'rock': '🎸',
-    'pop': '🎵',
-    'electronic': '🎧',
-    'hip hop': '🎤',
-    'rap': '🎤',
-    'r&b': '💜',
-    'soul': '💜',
-    'jazz': '🎷',
-    'classical': '🎻',
-    'country': '🤠',
-    'metal': '🤘',
-    'punk': '🤘',
-    'indie': '✨',
-    'alternative': '✨',
-    'dance': '💃',
-    'reggae': '🌴',
-    'blues': '🎺',
-    'folk': '🪕',
-    'latin': '💃',
-    'k-pop': '🇰🇷',
-    'swedish': '🇸🇪',
+    "rock": "🎸",
+    "pop": "🎵",
+    "electronic": "🎧",
+    "hip hop": "🎤",
+    "rap": "🎤",
+    "r&b": "💜",
+    "soul": "💜",
+    "jazz": "🎷",
+    "classical": "🎻",
+    "country": "🤠",
+    "metal": "🤘",
+    "punk": "🤘",
+    "indie": "✨",
+    "alternative": "✨",
+    "dance": "💃",
+    "reggae": "🌴",
+    "blues": "🎺",
+    "folk": "🪕",
+    "latin": "💃",
+    "k-pop": "🇰🇷",
+    "swedish": "🇸🇪",
 }
 
 
@@ -203,74 +203,75 @@ GENRE_EMOJI_MAP = {
 # FORMATTING FUNCTIONS
 # =============================================================================
 
+
 def format_top_genres(genres: list[str], limit: int = 5) -> str:
     """
     Format a list of top genres into a readable string.
-    
+
     Args:
         genres: List of genre names, ordered by popularity
         limit: Maximum number of genres to include
-    
+
     Returns:
         Formatted string like "🎸 Rock • 🎵 Pop • 🎧 Electronic"
     """
     if not genres:
         return "Ingen genredata tillgänglig"
-    
+
     formatted = []
     for genre in genres[:limit]:
         genre_lower = genre.lower()
         # Find matching emoji
-        emoji = '🎵'  # Default
+        emoji = "🎵"  # Default
         for key, value in GENRE_EMOJI_MAP.items():
             if key in genre_lower:
                 emoji = value
                 break
         formatted.append(f"{emoji} {genre.title()}")
-    
+
     return " • ".join(formatted)
 
 
 def format_top_artists(artists: list[str], limit: int = 5) -> str:
     """
     Format a list of top artists into a readable string.
-    
+
     Args:
         artists: List of artist names, ordered by frequency
         limit: Maximum number of artists to include
-    
+
     Returns:
         Formatted string like "1. Artist A • 2. Artist B • 3. Artist C"
     """
     if not artists:
         return "Ingen artistdata tillgänglig"
-    
-    formatted = [f"{i+1}. {artist}" for i, artist in enumerate(artists[:limit])]
+
+    formatted = [f"{i + 1}. {artist}" for i, artist in enumerate(artists[:limit])]
     return " • ".join(formatted)
 
 
 def format_top_contributors(contributors: list[dict], limit: int = 5) -> str:
     """
     Format a list of top contributors into a readable string.
-    
+
     Args:
         contributors: List of dicts with 'user_name' and 'track_count' keys
         limit: Maximum number of contributors to include
-    
+
     Returns:
         Formatted string like "🥇 Alice (42) • 🥈 Bob (38) • 🥉 Charlie (25)"
     """
     if not contributors:
         return "Ingen bidragsdata tillgänglig"
-    
+
     # Medal emojis for top 3, then numbers
-    medals = ['🥇', '🥈', '🥉', '4.', '5.', '6.', '7.', '8.', '9.', '10.']
-    
+    medals = ["🥇", "🥈", "🥉", "4.", "5.", "6.", "7.", "8.", "9.", "10."]
+
     formatted = []
     for i, contributor in enumerate(contributors[:limit]):
-        medal = medals[i] if i < len(medals) else f"{i+1}."
-        name = contributor.get('user_name', 'Unknown')
-        count = contributor.get('track_count', 0)
+        medal = medals[i] if i < len(medals) else f"{i + 1}."
+        name = contributor.get("user_name", "Unknown")
+        count = contributor.get("track_count", 0)
         formatted.append(f"{medal} {name} ({count})")
-    
+
     return " • ".join(formatted)
