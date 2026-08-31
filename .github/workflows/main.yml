@@ -4,8 +4,13 @@ on:
   push:
     branches: [ main ]
   schedule:
-    # Run every Friday between 08:00 and 18:00
-    - cron:  '*/15 7-19 * * 5'
+    # Every Friday, every 15 min, 07-19 UTC (09-21 CEST / 08-20 CET).
+    # Offset 3 min off the quarter marks: GitHub's schedule event is
+    # best-effort and jobs are delayed or dropped under load, worst at the
+    # top of the hour, so the docs advise not scheduling on it. Runs are
+    # idempotent (6-day window, diffed against the playlist), so delayed or
+    # duplicate runs are harmless and a dropped one is covered by the next.
+    - cron: '3,18,33,48 7-19 * * 5'
   workflow_dispatch:
 
 permissions:
